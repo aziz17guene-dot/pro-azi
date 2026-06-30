@@ -1,0 +1,67 @@
+{
+  "name": "Aziz-Pro - Gestion Boutique",
+  "short_name": "Aziz-Pro",
+  "description": "Application complète de gestion de supérette avec point de vente (POS), gestion de stock, clients et finances",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "portrait-primary",
+  "background_color": "#ffffff",
+  "theme_color": "#2563eb",
+  "icons": [
+    {
+      "src": "./icon-192.svg",
+      "sizes": "192x192",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "./icon-512.svg",
+      "sizes": "512x512",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ],
+  "categories": [
+    "business",
+    "productivity"
+  ],
+  "shortcuts": [
+    {
+      "name": "Ouvrir Caisse",
+      "short_name": "Caisse",
+      "description": "Accès direct au point de vente",
+      "url": "./?tab=pos",
+      "icons": [
+        {
+          "src": "./icon-192.svg",
+          "sizes": "192x192",
+          "type": "image/svg+xml"
+        }
+      ]
+    },
+    {
+      "name": "Vérifier Stock",
+      "short_name": "Stock",
+      "description": "Consulter l'inventaire",
+      "url": "./?tab=stock",
+      "icons": [
+        {
+          "src": "./icon-192.svg",
+          "sizes": "192x192",
+          "type": "image/svg+xml"
+        }
+      ]
+    }
+  ],
+  "share_target": {
+    "action": "./",
+    "method": "POST",
+    "enctype": "application/x-www-form-urlencoded",
+    "params": {
+      "title": "title",
+      "text": "text",
+      "url": "url"
+    }
+  }
+}
