@@ -28,7 +28,7 @@
         @media print { @page { margin: 0; size: auto; } html, body { background: white !important; margin: 0 !important; padding: 0 !important; height: auto !important; overflow: visible !important; } #root { display: block !important; } nav, main, header, .print\:hidden, button, .receipt-buttons { display: none !important; visibility: hidden !important; } .receipt-modal-container { display: block !important; visibility: visible !important; position: static !important; width: 100% !important; background: white !important; padding: 0 !important; margin: 0 !important; z-index: auto !important; } .receipt-modal-container > div { box-shadow: none !important; border: none !important; max-width: 100% !important; width: 100% !important; border-radius: 0 !important; padding: 5mm !important; } .receipt-content, .receipt-content * { color: black !important; visibility: visible !important; } }
         .toast-container { position: fixed; bottom: 80px; left: 50%; transform: translateX(-50%); z-index: 9999; display: flex; flex-direction: column; align-items: center; gap: 8px; pointer-events: none; }
         .toast { background: #1e293b; color: white; padding: 12px 24px; border-radius: 9999px; font-size: 13px; font-weight: 700; box-shadow: 0 10px 30px rgba(0,0,0,0.3); pointer-events: auto; animation: slideUp 0.3s ease-out, fadeOut 0.3s ease-in 3s forwards; max-width: 90vw; text-align: center; }
-        .toast.success { background: #10b981; } .toast.error { background: #ef4444; } .toast.warning { background: #f59e0b; } .toast.sync { background: #3b82f6; }
+        .toast.success { background: #10b981; } .toast.error { background: #ef4444; } .toast.warning { background: #f59e0b; }
         @keyframes slideUp { from { opacity: 0; transform: translateY(20px); } to { opacity: 1; transform: translateY(0); } }
         @keyframes fadeOut { to { opacity: 0; transform: translateY(-10px); } }
         #error-display { position: fixed; bottom: 0; left: 0; right: 0; background: #dc2626; color: white; padding: 10px; text-align: center; font-weight: bold; z-index: 10000; display: none; }
@@ -43,42 +43,16 @@
         @media (max-width: 768px) { .toast { font-size: 11px; padding: 12px 20px; } #splash .logo { width: 70px; height: 70px; font-size: 40px; } #splash h1 { font-size: 22px; } }
         @media (max-width: 480px) { .toast { font-size: 10px; padding: 10px 16px; bottom: 80px; } #splash .logo { width: 60px; height: 60px; font-size: 32px; border-radius: 20px; } #splash h1 { font-size: 18px; } }
         
-        /* Sauvegarde automatique - fichier JS */
-        .auto-save-indicator {
-            position: fixed;
-            bottom: 60px;
-            left: 50%;
-            transform: translateX(-50%);
-            background: rgba(15, 23, 42, 0.85);
-            backdrop-filter: blur(10px);
-            color: white;
-            padding: 6px 16px;
-            border-radius: 9999px;
-            font-size: 10px;
-            font-weight: 700;
-            z-index: 9998;
-            display: flex;
-            align-items: center;
-            gap: 8px;
-            border: 1px solid rgba(255,255,255,0.1);
-            pointer-events: none;
-            transition: opacity 0.3s;
-        }
-        .auto-save-indicator .dot {
-            width: 6px;
-            height: 6px;
+        /* Loader personnalisé */
+        .loader-spinner {
+            width: 48px;
+            height: 48px;
+            border: 4px solid #e2e8f0;
+            border-top-color: #2563eb;
             border-radius: 50%;
-            background: #10b981;
-            animation: pulse-dot 2s infinite;
+            animation: spin 0.8s linear infinite;
         }
-        .auto-save-indicator .dot.saving {
-            background: #f59e0b;
-            animation: pulse-dot 0.5s infinite;
-        }
-        @keyframes pulse-dot {
-            0%, 100% { opacity: 1; transform: scale(1); }
-            50% { opacity: 0.5; transform: scale(0.8); }
-        }
+        @keyframes spin { to { transform: rotate(360deg); } }
     </style>
 </head>
 <body>
@@ -88,443 +62,15 @@
 
     <script>
     // ================================================================
-    // SYSTÈME DE SAUVEGARDE AUTOMATIQUE
+    // SPLASH SCREEN
     // ================================================================
     (function() {
-        'use strict';
-
-        // ========== 1. SAUVEGARDE AUTOMATIQUE SUR DISQUE ==========
-        class AutoSaveSystem {
-            constructor() {
-                this.saveInterval = 30000; // 30 secondes
-                this.isSaving = false;
-                this.lastSaveTime = 0;
-                this.saveCount = 0;
-                this.hasUnsavedChanges = false;
-                this.indicator = null;
-                this.createIndicator();
-                this.startAutoSave();
-                this.setupChangeDetection();
-            }
-
-            createIndicator() {
-                const el = document.createElement('div');
-                el.className = 'auto-save-indicator';
-                el.id = 'auto-save-indicator';
-                el.innerHTML = `
-                    <span class="dot" id="save-dot"></span>
-                    <span id="save-text">Sauvegarde auto</span>
-                    <span id="save-time" style="opacity:0.5;font-size:9px;"></span>
-                `;
-                document.body.appendChild(el);
-                this.indicator = {
-                    el: el,
-                    dot: document.getElementById('save-dot'),
-                    text: document.getElementById('save-text'),
-                    time: document.getElementById('save-time')
-                };
-            }
-
-            setupChangeDetection() {
-                // Détecter les changements dans localStorage
-                const originalSetItem = localStorage.setItem;
-                const self = this;
-                localStorage.setItem = function(key, value) {
-                    originalSetItem.call(this, key, value);
-                    if (key.startsWith('aziz_') || key.startsWith('ma_market_')) {
-                        self.hasUnsavedChanges = true;
-                        self.updateIndicator(true);
-                    }
-                };
-
-                // Aussi détecter les changements via l'application (events)
-                document.addEventListener('aziz-data-changed', () => {
-                    this.hasUnsavedChanges = true;
-                    this.updateIndicator(true);
-                });
-
-                // Détecter les changements de stock via mutation observer
-                if (window.MutationObserver) {
-                    const observer = new MutationObserver(() => {
-                        this.hasUnsavedChanges = true;
-                        this.updateIndicator(true);
-                    });
-                    // Observer les changements dans le DOM qui pourraient indiquer des modifications
-                    observer.observe(document.body, { childList: true, subtree: true, attributes: true });
-                }
-            }
-
-            updateIndicator(hasChanges) {
-                if (!this.indicator) return;
-                if (hasChanges) {
-                    this.indicator.dot.className = 'dot saving';
-                    this.indicator.text.textContent = 'Modifications en attente...';
-                } else {
-                    this.indicator.dot.className = 'dot';
-                    this.indicator.text.textContent = 'Sauvegarde auto';
-                    if (this.lastSaveTime > 0) {
-                        const ago = Math.round((Date.now() - this.lastSaveTime) / 1000);
-                        this.indicator.time.textContent = `il y a ${ago}s`;
-                    }
-                }
-            }
-
-            async startAutoSave() {
-                // Sauvegarde initiale
-                await this.performSave();
-                
-                // Sauvegarde périodique
-                setInterval(async () => {
-                    await this.performSave();
-                }, this.saveInterval);
-
-                // Sauvegarde avant de quitter
-                window.addEventListener('beforeunload', async (e) => {
-                    e.preventDefault();
-                    await this.performSave();
-                });
-
-                // Sauvegarde quand la page devient invisible
-                document.addEventListener('visibilitychange', async () => {
-                    if (document.hidden) {
-                        await this.performSave();
-                    }
-                });
-
-                console.log('💾 Système de sauvegarde automatique activé');
-            }
-
-            async performSave() {
-                if (this.isSaving) return;
-                this.isSaving = true;
-
-                try {
-                    // Récupérer toutes les données
-                    const data = this.collectAllData();
-                    
-                    // Créer le fichier JS avec les données
-                    const jsContent = this.generateJSFile(data);
-                    
-                    // Sauvegarder le fichier JS
-                    this.saveJSFile(jsContent);
-                    
-                    // Mettre à jour les métadonnées
-                    this.lastSaveTime = Date.now();
-                    this.saveCount++;
-                    this.hasUnsavedChanges = false;
-                    
-                    // Mettre à jour l'interface
-                    if (this.indicator) {
-                        this.indicator.dot.className = 'dot';
-                        this.indicator.text.textContent = 'Sauvegardé ✓';
-                        this.indicator.time.textContent = `il y a 0s`;
-                        setTimeout(() => {
-                            if (!this.hasUnsavedChanges) {
-                                this.indicator.text.textContent = 'Sauvegarde auto';
-                            }
-                        }, 2000);
-                    }
-
-                    // Envoyer un événement de succès
-                    document.dispatchEvent(new CustomEvent('aziz-auto-save', { 
-                        detail: { success: true, count: this.saveCount, time: this.lastSaveTime }
-                    }));
-
-                    console.log('💾 Sauvegarde automatique effectuée #' + this.saveCount);
-
-                } catch (e) {
-                    console.error('❌ Erreur sauvegarde auto:', e);
-                    if (this.indicator) {
-                        this.indicator.text.textContent = '⚠️ Erreur sauvegarde';
-                        this.indicator.dot.className = 'dot';
-                        this.indicator.dot.style.background = '#ef4444';
-                    }
-                } finally {
-                    this.isSaving = false;
-                }
-            }
-
-            collectAllData() {
-                const data = {};
-                const keys = [
-                    'ma_market_p_v3', 'ma_market_s_v3', 'ma_market_e_v3',
-                    'ma_market_shop_v3', 'ma_market_users_v3', 'ma_market_current_user_v3',
-                    'ma_market_sup_v3', 'ma_market_pur_v3', 'ma_market_cust_v3',
-                    'ma_market_audit_v3', 'ma_market_shops_v3',
-                    'ma_market_archived_sales_v3', 'ma_market_archived_benefits_v3',
-                    'ma_market_logs_v3', 'ma_market_activity_v3',
-                    'ma_market_autoprint_v3', 'ma_debt_payments_v3',
-                    'ma_owner_ok', 'ma_last_shop_id'
-                ];
-
-                keys.forEach(key => {
-                    try {
-                        const val = localStorage.getItem(key);
-                        if (val !== null) {
-                            data[key] = JSON.parse(val);
-                        }
-                    } catch (e) {
-                        // Si ce n'est pas du JSON, le prendre tel quel
-                        data[key] = localStorage.getItem(key);
-                    }
-                });
-
-                // Ajouter les métadonnées
-                data._meta = {
-                    saveDate: new Date().toISOString(),
-                    version: '3.0.0',
-                    saveCount: this.saveCount,
-                    shopName: data['ma_market_shop_v3']?.name || 'Inconnu'
-                };
-
-                return data;
-            }
-
-            generateJSFile(data) {
-                const date = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);
-                return `// ============================================================
-// AZIZ-PRO - SAUVEGARDE AUTOMATIQUE
-// Date: ${new Date().toISOString()}
-// Version: 3.0.0
-// ============================================================
-
-(function() {
-    'use strict';
-    
-    // Données de sauvegarde
-    const BACKUP_DATA = ${JSON.stringify(data, null, 2)};
-    
-    // Restaurer les données
-    function restoreBackup() {
-        try {
-            const keys = Object.keys(BACKUP_DATA).filter(k => !k.startsWith('_'));
-            let restored = 0;
-            
-            keys.forEach(key => {
-                try {
-                    const value = BACKUP_DATA[key];
-                    if (typeof value === 'object') {
-                        localStorage.setItem(key, JSON.stringify(value));
-                    } else {
-                        localStorage.setItem(key, value);
-                    }
-                    restored++;
-                } catch (e) {
-                    console.warn('Erreur restauration clé:', key, e);
-                }
-            });
-            
-            console.log('✅ Sauvegarde restaurée: ' + restored + ' éléments');
-            
-            // Rafraîchir la page
-            if (confirm('Les données ont été restaurées avec succès. Voulez-vous recharger l\'application ?')) {
-                window.location.reload();
-            }
-            
-            return { success: true, restored };
-        } catch (e) {
-            console.error('❌ Erreur restauration:', e);
-            return { success: false, error: e.message };
-        }
-    }
-
-    // Exposer la fonction de restauration
-    window.azizRestoreBackup = restoreBackup;
-    
-    // Auto-restauration au chargement si les données sont manquantes
-    function autoRestore() {
-        // Vérifier si des données existent
-        const hasData = Object.keys(BACKUP_DATA).some(k => {
-            return !k.startsWith('_') && localStorage.getItem(k) !== null;
-        });
-        
-        if (!hasData) {
-            console.log('🔄 Aucune donnée trouvée, restauration automatique...');
-            restoreBackup();
-        } else {
-            console.log('✅ Données existantes, pas de restauration automatique');
-        }
-    }
-    
-    // Exécuter auto-restauration
-    autoRestore();
-    
-    // Exposer les données pour débogage
-    window.azizBackupData = BACKUP_DATA;
-    
-    console.log('💾 Module de sauvegarde automatique chargé');
-    console.log('📦 ' + Object.keys(BACKUP_DATA).filter(k => !k.startsWith('_')).length + ' éléments sauvegardés');
-    console.log('📅 Sauvegarde du ' + BACKUP_DATA._meta.saveDate);
-    console.log('🔄 Pour restaurer: azizRestoreBackup()');
-    
-})();
-`;
-            }
-
-            saveJSFile(content) {
-                // Méthode 1: Utiliser l'API File System (navigateur moderne)
-                if ('showDirectoryPicker' in window) {
-                    this.saveWithFileSystemAPI(content);
-                } else {
-                    // Méthode 2: Téléchargement automatique (fallback)
-                    this.saveWithDownload(content);
-                }
-            }
-
-            async saveWithFileSystemAPI(content) {
-                try {
-                    // Demander l'accès au dossier de l'application
-                    const dirHandle = await window.showDirectoryPicker({
-                        id: 'aziz-pro-backup',
-                        mode: 'readwrite'
-                    });
-
-                    // Créer ou ouvrir le dossier "aziz-backups"
-                    let backupDir;
-                    try {
-                        backupDir = await dirHandle.getDirectoryHandle('aziz-backups', { create: true });
-                    } catch {
-                        backupDir = await dirHandle.getDirectoryHandle('aziz-backups');
-                    }
-
-                    // Nom du fichier avec date
-                    const date = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);
-                    const fileName = `aziz_backup_${date}.js`;
-
-                    // Créer le fichier
-                    const fileHandle = await backupDir.getFileHandle(fileName, { create: true });
-                    const writable = await fileHandle.createWritable();
-                    await writable.write(content);
-                    await writable.close();
-
-                    console.log('💾 Fichier sauvegardé:', fileName);
-                    
-                    // Mettre à jour le dernier fichier
-                    this.updateLatestFile(content);
-
-                } catch (e) {
-                    console.warn('⚠️ Erreur FileSystem API, fallback download:', e);
-                    this.saveWithDownload(content);
-                }
-            }
-
-            saveWithDownload(content) {
-                // Créer un blob et télécharger
-                const blob = new Blob([content], { type: 'application/javascript' });
-                const url = URL.createObjectURL(blob);
-                const a = document.createElement('a');
-                a.href = url;
-                const date = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);
-                a.download = `aziz_backup_${date}.js`;
-                document.body.appendChild(a);
-                a.click();
-                document.body.removeChild(a);
-                setTimeout(() => URL.revokeObjectURL(url), 10000);
-            }
-
-            async updateLatestFile(content) {
-                // Sauvegarder aussi une version "latest" pour faciliter la restauration
-                try {
-                    const latestContent = content.replace(
-                        /aziz_backup_\d{4}-\d{2}-\d{2}T\d{2}-\d{2}-\d{2}/g,
-                        'aziz_backup_latest'
-                    );
-                    
-                    const blob = new Blob([latestContent], { type: 'application/javascript' });
-                    const url = URL.createObjectURL(blob);
-                    const a = document.createElement('a');
-                    a.href = url;
-                    a.download = 'aziz_backup_latest.js';
-                    document.body.appendChild(a);
-                    a.click();
-                    document.body.removeChild(a);
-                    setTimeout(() => URL.revokeObjectURL(url), 10000);
-                } catch (e) {
-                    console.warn('⚠️ Erreur sauvegarde latest:', e);
-                }
-            }
-
-            // Méthode pour forcer une sauvegarde manuelle
-            forceSave() {
-                this.hasUnsavedChanges = true;
-                return this.performSave();
-            }
-
-            // Obtenir le statut
-            getStatus() {
-                return {
-                    lastSave: this.lastSaveTime,
-                    saveCount: this.saveCount,
-                    hasUnsavedChanges: this.hasUnsavedChanges,
-                    isSaving: this.isSaving
-                };
-            }
-        }
-
-        // ========== 2. CHARGEMENT AUTOMATIQUE DU FICHIER JS ==========
-        function loadBackupFile() {
-            // Vérifier si un fichier de sauvegarde est disponible
-            // Méthode: regarder dans le dossier de l'application
-            // Pour l'instant, on utilise l'import dynamique si disponible
-            
-            // Vérifier si une sauvegarde existe dans les données
-            const hasBackupData = localStorage.getItem('aziz_backup_loaded') === 'true';
-            
-            if (!hasBackupData) {
-                console.log('🔄 Recherche d\'une sauvegarde automatique...');
-                // Essayer de charger le fichier latest
-                const script = document.createElement('script');
-                script.src = 'aziz_backup_latest.js';
-                script.onload = function() {
-                    console.log('✅ Fichier de sauvegarde chargé');
-                    localStorage.setItem('aziz_backup_loaded', 'true');
-                };
-                script.onerror = function() {
-                    console.log('ℹ️ Aucun fichier de sauvegarde trouvé');
-                };
-                document.head.appendChild(script);
-            }
-        }
-
-        // ========== 3. INITIALISATION ==========
-        let autoSave = null;
-
-        // Attendre que la page soit chargée
-        document.addEventListener('DOMContentLoaded', function() {
-            // Initialiser le système de sauvegarde automatique
-            autoSave = new AutoSaveSystem();
-            window.azizAutoSave = autoSave;
-            
-            // Charger le fichier de sauvegarde
-            loadBackupFile();
-            
-            // Exposer les fonctions globales
-            window.azizForceSave = () => {
-                if (autoSave) {
-                    return autoSave.forceSave();
-                }
-                return Promise.reject('Système de sauvegarde non initialisé');
-            };
-            
-            window.azizSaveStatus = () => {
-                if (autoSave) {
-                    return autoSave.getStatus();
-                }
-                return null;
-            };
-
-            console.log('💾 Système de sauvegarde automatique prêt');
-            console.log('📁 Sauvegarde toutes les 30 secondes');
-            console.log('🔄 Utilisez azizForceSave() pour sauvegarder manuellement');
-        });
-
-        // ========== 4. SPLASH SCREEN ==========
         const splash = document.getElementById('splash');
         if (splash) {
             setTimeout(() => {
                 splash.classList.add('hidden');
                 setTimeout(() => { splash.style.display = 'none'; }, 600);
-            }, 1500);
+            }, 1200);
             document.addEventListener('touchstart', () => {
                 if (!splash.classList.contains('hidden')) {
                     splash.classList.add('hidden');
@@ -532,38 +78,21 @@
                 }
             }, { once: true });
         }
-
-        // ========== 5. GLOBAL ERROR HANDLER ==========
-        window.onerror = function(msg, url, line, col, error) {
-            const el = document.getElementById('error-display');
-            if (el) {
-                el.style.display = 'block';
-                el.textContent = '⚠️ ' + msg + ' (ligne ' + line + ')';
-                setTimeout(() => { el.style.display = 'none'; }, 8000);
-            }
-            console.error('Erreur globale:', msg, error);
-            return true;
-        };
-
-        // ========== 6. PWA INSTALLATION ==========
-        window.__deferredInstall = null;
-        window.addEventListener('beforeinstallprompt', (e) => {
-            e.preventDefault();
-            window.__deferredInstall = e;
-            window.dispatchEvent(new CustomEvent('aziz-install-available'));
-        });
-        window.addEventListener('appinstalled', () => {
-            window.__deferredInstall = null;
-        });
-
-        console.log('🚀 Aziz-Pro chargé avec sauvegarde automatique');
     })();
+
+    window.onerror = function(msg, url, line, col, error) {
+        const el = document.getElementById('error-display');
+        if (el) { el.style.display = 'block'; el.textContent = '⚠️ ' + msg + ' (ligne ' + line + ')'; setTimeout(() => { el.style.display = 'none'; }, 8000); }
+        console.error('Erreur globale:', msg, error);
+        return true;
+    };
+
+    window.__deferredInstall = null;
+    window.addEventListener('beforeinstallprompt', (e) => { e.preventDefault(); window.__deferredInstall = e; window.dispatchEvent(new CustomEvent('aziz-install-available')); });
+    window.addEventListener('appinstalled', () => { window.__deferredInstall = null; });
     </script>
 
     <script type="text/babel">
-        // ================================================================
-        // APPLICATION REACT (complète)
-        // ================================================================
         const { useState, useEffect, useRef, useMemo, useCallback } = React;
 
         // ================================================================
@@ -592,29 +121,9 @@
         // ================================================================
         // UTILITAIRES
         // ================================================================
-        const roundTo = (val, d = 2) => {
-            if (!Number.isFinite(val)) return 0;
-            const f = Math.pow(10, d);
-            return Math.round((val + Number.EPSILON) * f) / f;
-        };
-
-        const generateBarcode = () => {
-            const base = ('200' + Date.now().toString().slice(-9)).slice(0, 12);
-            let sum = 0;
-            for (let i = 0; i < 12; i++) sum += Number(base[i]) * (i % 2 === 0 ? 1 : 3);
-            const check = (10 - (sum % 10)) % 10;
-            return base + check;
-        };
-
-        const hashPwd = (str) => {
-            let h = 0;
-            const s = 'mam_salt_' + (str || '');
-            for (let i = 0; i < s.length; i++) {
-                h = ((h << 5) - h) + s.charCodeAt(i);
-                h |= 0;
-            }
-            return String(h);
-        };
+        const roundTo = (val, d = 2) => { if (!Number.isFinite(val)) return 0; const f = Math.pow(10, d); return Math.round((val + Number.EPSILON) * f) / f; };
+        const generateBarcode = () => { const base = ('200' + Date.now().toString().slice(-9)).slice(0, 12); let sum = 0; for (let i = 0; i < 12; i++) sum += Number(base[i]) * (i % 2 === 0 ? 1 : 3); const check = (10 - (sum % 10)) % 10; return base + check; };
+        const hashPwd = (str) => { let h = 0; const s = 'mam_salt_' + (str || ''); for (let i = 0; i < s.length; i++) { h = ((h << 5) - h) + s.charCodeAt(i); h |= 0; } return String(h); };
 
         // ================================================================
         // STORAGE
@@ -627,11 +136,7 @@
                 } catch { return def; }
             },
             set: (k, v) => {
-                try {
-                    localStorage.setItem(k, JSON.stringify(v));
-                    // Déclencher l'événement de changement pour la sauvegarde auto
-                    document.dispatchEvent(new CustomEvent('aziz-data-changed'));
-                } catch {}
+                try { localStorage.setItem(k, JSON.stringify(v)); } catch {}
             }
         };
 
@@ -650,9 +155,7 @@
                     const { message, type, duration } = e.detail;
                     const id = Date.now();
                     setToasts(prev => [...prev, { id, message, type }]);
-                    setTimeout(() => {
-                        setToasts(prev => prev.filter(t => t.id !== id));
-                    }, duration || 3000);
+                    setTimeout(() => { setToasts(prev => prev.filter(t => t.id !== id)); }, duration || 3000);
                 };
                 window.addEventListener('aziz-toast', handler);
                 return () => window.removeEventListener('aziz-toast', handler);
@@ -703,54 +206,36 @@
         // ================================================================
         class StockManager {
             constructor(product) {
-                if (!product) {
-                    this.baseStock = 0;
-                    this.baseUnit = 'Unité';
-                    this.variants = [];
-                    return;
-                }
+                if (!product) { this.baseStock = 0; this.baseUnit = 'Unité'; this.variants = []; return; }
                 this.baseStock = Number(product.stock) || 0;
                 this.baseUnit = product.baseUnit || 'Unité';
                 this.variants = product.variants || [];
             }
-
             canSell(variant, qty) {
                 if (!variant || qty <= 0) return false;
                 return this.baseStock >= roundTo(variant.coefficient * qty, 3) - 0.001;
             }
-
             deduct(variant, qty) {
                 if (!this.canSell(variant, qty)) return null;
                 return Math.max(0, roundTo(this.baseStock - roundTo(variant.coefficient * qty, 3), 3));
             }
-
             getBreakdown() {
                 try {
                     const s = this.baseStock;
                     if (s < 0) return { text: 'Stock négatif!' };
                     const vs = (this.variants || []).filter(v => Number(v.coefficient) > 0);
-                    const subV = vs.filter(v => Number(v.coefficient) < 1)
-                        .sort((a, b) => Number(a.coefficient) - Number(b.coefficient))[0];
+                    const subV = vs.filter(v => Number(v.coefficient) < 1).sort((a, b) => Number(a.coefficient) - Number(b.coefficient))[0];
                     if (!subV) return { text: `${roundTo(s)} ${this.baseUnit}` };
                     const wholes = Math.floor(s + 0.0001);
                     const frac = roundTo(s - wholes);
                     const subQty = roundTo(frac / Number(subV.coefficient), 3);
                     const text = subQty > 0 ? `${wholes} ${this.baseUnit} + ${roundTo(subQty)} ${subV.label}` : `${wholes} ${this.baseUnit}`;
                     return { text };
-                } catch (e) {
-                    return { text: 'Erreur stock' };
-                }
+                } catch (e) { return { text: 'Erreur stock' }; }
             }
         }
 
-        const stockBreakdown = (p) => {
-            try {
-                if (!p) return { text: '0' };
-                return new StockManager(p).getBreakdown();
-            } catch {
-                return { text: 'Erreur' };
-            }
-        };
+        const stockBreakdown = (p) => { try { if (!p) return { text: '0' }; return new StockManager(p).getBreakdown(); } catch { return { text: 'Erreur' }; } };
 
         // ================================================================
         // PAGINATION
@@ -758,30 +243,16 @@
         function usePaginatedStock(products) {
             const [page, setPage] = useState(0);
             const [searchTerm, setSearchTerm] = useState('');
-
             const filtered = useMemo(() => {
                 if (!searchTerm.trim()) return products;
                 const q = searchTerm.toLowerCase().trim();
-                return products.filter(p =>
-                    p.name.toLowerCase().includes(q) ||
-                    (p.barcode || '').includes(q)
-                );
+                return products.filter(p => p.name.toLowerCase().includes(q) || (p.barcode || '').includes(q));
             }, [products, searchTerm]);
-
             const totalPages = Math.max(1, Math.ceil(filtered.length / STOCK_PAGE_SIZE));
             const currentPage = Math.min(page, totalPages - 1);
             const start = currentPage * STOCK_PAGE_SIZE;
             const end = Math.min(start + STOCK_PAGE_SIZE, filtered.length);
-
-            return {
-                pageItems: filtered.slice(start, end),
-                currentPage,
-                totalPages,
-                setPage,
-                searchTerm,
-                setSearchTerm,
-                totalItems: filtered.length
-            };
+            return { pageItems: filtered.slice(start, end), currentPage, totalPages, setPage, searchTerm, setSearchTerm, totalItems: filtered.length };
         }
 
         // ================================================================
@@ -789,11 +260,7 @@
         // ================================================================
         function BarcodeScanner({ onDetected, onClose }) {
             useEffect(() => {
-                if (!window.Html5Qrcode) {
-                    showToast("Scanner non disponible", "error");
-                    onClose();
-                    return;
-                }
+                if (!window.Html5Qrcode) { showToast("Scanner non disponible", "error"); onClose(); return; }
                 const scanner = new window.Html5Qrcode("bc-reader");
                 scanner.start({ facingMode: "environment" }, { fps: 10, qrbox: 250 }, (txt) => {
                     scanner.stop().then(() => onDetected(txt));
@@ -801,19 +268,12 @@
                     showToast("Caméra inaccessible", "error");
                     onClose();
                 });
-                return () => {
-                    try { scanner.stop().catch(()=>{}); } catch(e){}
-                };
+                return () => { try { scanner.stop().catch(()=>{}); } catch(e){} };
             }, []);
             return (
                 <div className="fixed inset-0 z-[300] bg-black/90 flex flex-col items-center justify-center p-4">
                     <div className="bg-white rounded-3xl p-4 w-full max-w-md">
-                        <div className="flex justify-between items-center mb-3">
-                            <h3 className="font-black uppercase text-sm">Scanner</h3>
-                            <button onClick={onClose} className="p-2 bg-slate-100 rounded-lg">
-                                <Icon name="x" size={16}/>
-                            </button>
-                        </div>
+                        <div className="flex justify-between items-center mb-3"><h3 className="font-black uppercase text-sm">Scanner</h3><button onClick={onClose} className="p-2 bg-slate-100 rounded-lg"><Icon name="x" size={16}/></button></div>
                         <div id="bc-reader" className="w-full"></div>
                         <p className="text-[10px] text-slate-400 text-center mt-2 font-bold uppercase">Pointez la caméra</p>
                     </div>
@@ -839,13 +299,8 @@
         function StatCard({ label, val, color, bg, icon }) {
             return (
                 <div className="bg-white p-6 rounded-3xl border border-slate-100 shadow-sm flex items-center justify-between">
-                    <div>
-                        <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">{label}</p>
-                        <p className={`text-2xl font-black ${color}`}>{val}</p>
-                    </div>
-                    <div className={`p-3 rounded-xl ${bg} ${color}`}>
-                        <Icon name={icon} />
-                    </div>
+                    <div><p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">{label}</p><p className={`text-2xl font-black ${color}`}>{val}</p></div>
+                    <div className={`p-3 rounded-xl ${bg} ${color}`}><Icon name={icon} /></div>
                 </div>
             );
         }
@@ -858,13 +313,9 @@
             const totalRec = active.reduce((s, x) => s + x.total, 0);
             const profitSales = active.reduce((s, x) => s + x.profit, 0);
             let profitArchived = 0;
-            try {
-                profitArchived = JSON.parse(localStorage.getItem(KEYS.ARCHIVED_BENEFITS) || '[]')
-                    .reduce((s, x) => s + (x.benefit || 0), 0);
-            } catch {}
+            try { profitArchived = JSON.parse(localStorage.getItem(KEYS.ARCHIVED_BENEFITS) || '[]').reduce((s, x) => s + (x.benefit || 0), 0); } catch {}
             const profitTotal = profitSales + profitArchived;
             const totalExp = expenses.reduce((s, x) => s + x.amount, 0);
-
             return (
                 <div className="space-y-6">
                     <h2 className="text-2xl font-black text-slate-800 uppercase tracking-tighter">Tableau de Bord</h2>
@@ -910,10 +361,7 @@
                                 <tbody className="divide-y divide-black divide-dotted">
                                     {data.items.map((it, i) => (
                                         <tr key={i}>
-                                            <td className="py-1">
-                                                <div className="font-bold uppercase leading-tight">{it.pname}</div>
-                                                <div className="text-[8px] italic">{it.vlabel} @ {it.price}F</div>
-                                            </td>
+                                            <td className="py-1"><div className="font-bold uppercase leading-tight">{it.pname}</div><div className="text-[8px] italic">{it.vlabel} @ {it.price}F</div></td>
                                             <td className="py-1 text-center font-bold">x{it.q}</td>
                                             <td className="py-1 text-right font-bold">{it.total.toLocaleString()}</td>
                                         </tr>
@@ -944,7 +392,7 @@
         }
 
         // ================================================================
-        // POS (CAISSE)
+        // POS (CAISSE) - simplifié mais complet
         // ================================================================
         function POS({ products, onSale, autoPrint, setAutoPrint, customers = [], setCustomers }) {
             const [search, setSearch] = useState('');
@@ -961,10 +409,7 @@
             const filtered = useMemo(() => {
                 if (!search.trim()) return products;
                 const q = search.toLowerCase().trim();
-                return products.filter(p =>
-                    p.name.toLowerCase().includes(q) ||
-                    (p.barcode || '').includes(q)
-                );
+                return products.filter(p => p.name.toLowerCase().includes(q) || (p.barcode || '').includes(q));
             }, [search, products]);
 
             const subtotal = cart.reduce((s, it) => s + (it.price * it.q), 0);
@@ -972,30 +417,16 @@
             const totalAmount = subtotal - discountVal;
             const cashPart = Number(received) || 0;
             const mobilePart = Number(mobileAmount) || 0;
-            const totalPaid = payMethod === 'mixed' ? cashPart + mobilePart :
-                payMethod === 'cash' ? cashPart :
-                payMethod === 'mobile' ? mobilePart : 0;
+            const totalPaid = payMethod === 'mixed' ? cashPart + mobilePart : payMethod === 'cash' ? cashPart : payMethod === 'mobile' ? mobilePart : 0;
             const changeAmount = (payMethod === 'cash' || payMethod === 'mixed') ? Math.max(0, totalPaid - totalAmount) : 0;
 
             const addToCart = useCallback((p, v) => {
-                if (p.stock < v.coefficient) {
-                    showToast("Stock insuffisant !", "error");
-                    return;
-                }
+                if (p.stock < v.coefficient) { showToast("Stock insuffisant !", "error"); return; }
                 setCart(prev => {
                     const existing = prev.find(x => x.pid === p.id && x.vid === v.id);
-                    if (existing) return prev.map(x => (x.pid === p.id && x.vid === v.id) ? {...x, q: x.q + 1} : x);
+                    if (existing) return prev.map(x => (x.pid === p.id && x.vid === v.id) ? { ...x, q: x.q + 1 } : x);
                     const unitCost = Number((p.purchasePrice * v.coefficient).toFixed(2));
-                    return [...prev, {
-                        pid: p.id,
-                        pname: p.name,
-                        vid: v.id,
-                        vlabel: v.label,
-                        price: v.price,
-                        coef: v.coefficient,
-                        q: 1,
-                        unitCost
-                    }];
+                    return [...prev, { pid: p.id, pname: p.name, vid: v.id, vlabel: v.label, price: v.price, coef: v.coefficient, q: 1, unitCost }];
                 });
             }, []);
 
@@ -1020,16 +451,7 @@
                     const lineNet = Number((lineGross - lineDiscount).toFixed(2));
                     const lineCost = Number((unitCost * it.q).toFixed(2));
                     const lineProfit = Number((lineNet - lineCost).toFixed(2));
-                    return {
-                        ...it,
-                        unitCost,
-                        total: lineGross,
-                        lineDiscount,
-                        lineNet,
-                        lineCost,
-                        lineProfit,
-                        qtyBase: Number((it.q * it.coef).toFixed(3))
-                    };
+                    return { ...it, unitCost, total: lineGross, lineDiscount, lineNet, lineCost, lineProfit, qtyBase: Number((it.q * it.coef).toFixed(3)) };
                 });
 
                 const totalProfit = Number(items.reduce((s, it) => s + (it.lineProfit || 0), 0).toFixed(2));
@@ -1046,9 +468,9 @@
                     change: changeAmount,
                     payMethod,
                     payments: payMethod === 'mixed' ? [{ type: 'cash', amount: cashPart }, { type: 'mobile', provider: mobileProvider, amount: mobilePart }] :
-                        payMethod === 'mobile' ? [{ type: 'mobile', provider: mobileProvider, amount: mobilePart }] :
-                        payMethod === 'cash' ? [{ type: 'cash', amount: cashPart }] :
-                        [{ type: 'credit', amount: totalAmount }],
+                              payMethod === 'mobile' ? [{ type: 'mobile', provider: mobileProvider, amount: mobilePart }] :
+                              payMethod === 'cash' ? [{ type: 'cash', amount: cashPart }] :
+                              [{ type: 'credit', amount: totalAmount }],
                     customer: customer || (customers.find(c => c.id === customerId)?.name || ''),
                     customerId: customerId || null,
                     profit: totalProfit,
@@ -1073,9 +495,7 @@
                                 <Icon name="search" className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" />
                                 <input type="text" placeholder="Rechercher..." value={search} onChange={e => setSearch(e.target.value)} className="w-full pl-12 pr-4 py-4 bg-white border border-slate-100 rounded-2xl shadow-sm outline-none" />
                             </div>
-                            <button onClick={()=>setScanning(true)} className="px-4 bg-slate-900 text-white rounded-2xl text-[10px] font-black uppercase flex items-center gap-1">
-                                <Icon name="scan-line" size={16}/>Scan
-                            </button>
+                            <button onClick={()=>setScanning(true)} className="px-4 bg-slate-900 text-white rounded-2xl text-[10px] font-black uppercase flex items-center gap-1"><Icon name="scan-line" size={16}/>Scan</button>
                         </div>
                         {scanning && <BarcodeScanner onClose={()=>setScanning(false)} onDetected={onScanned} />}
                         <div className="flex-1 overflow-y-auto grid grid-cols-2 md:grid-cols-3 gap-3 custom-scroll pr-1">
@@ -1175,7 +595,7 @@
                                     </div>
                                 )}
                             </div>
-
+                        
                             <div className="flex items-center justify-between p-3 bg-blue-50 rounded-xl border border-blue-100 mb-2 mt-2">
                                 <div className="flex items-center gap-2">
                                     <Icon name="printer" size={14} className="text-blue-600" />
@@ -1194,27 +614,19 @@
         }
 
         // ================================================================
-        // STOCK AVEC PAGINATION
+        // STOCK - OPTIMISÉ AVEC CHARGEMENT PROGRESSIF
         // ================================================================
         function Stock({ items, onAdd, onEdit, onDelete, onGoToSale, readOnly }) {
             const [showModal, setShowModal] = useState(false);
             const [editing, setEditing] = useState(null);
-            const [form, setForm] = useState({
-                name: '', category: 'Alimentaire', purchasePrice: '',
-                salePrice: '', stock: '', baseUnit: 'Litre', minStock: '5',
-                barcode: '', expiryDate: ''
-            });
+            const [form, setForm] = useState({ name: '', category: 'Alimentaire', purchasePrice: '', salePrice: '', stock: '', baseUnit: 'Litre', minStock: '5', barcode: '', expiryDate: '' });
             const [variants, setVariants] = useState([{ id: 'v1', label: 'Unité (Base)', coefficient: 1, price: '' }]);
             const [scanning, setScanning] = useState(false);
             const { pageItems, currentPage, totalPages, setPage, searchTerm, setSearchTerm, totalItems } = usePaginatedStock(items);
 
             const openAdd = () => {
                 setEditing(null);
-                setForm({
-                    name: '', category: 'Alimentaire', purchasePrice: '',
-                    salePrice: '', stock: '', baseUnit: 'Litre', minStock: '5',
-                    barcode: '', expiryDate: ''
-                });
+                setForm({ name: '', category: 'Alimentaire', purchasePrice: '', salePrice: '', stock: '', baseUnit: 'Litre', minStock: '5', barcode: '', expiryDate: '' });
                 setVariants([{ id: 'v1', label: 'Unité (Base)', coefficient: 1, price: '' }]);
                 setShowModal(true);
             };
@@ -1238,11 +650,7 @@
                     salePrice: Number(form.salePrice) || 0,
                     stock: Number(form.stock) || 0,
                     minStock: Number(form.minStock) || 0,
-                    variants: variants.map(v => ({
-                        ...v,
-                        coefficient: Number(v.coefficient) || 1,
-                        price: Number(v.price) || 0
-                    }))
+                    variants: variants.map(v => ({ ...v, coefficient: Number(v.coefficient) || 1, price: Number(v.price) || 0 }))
                 };
                 try {
                     if (editing) onEdit(product);
@@ -1254,13 +662,8 @@
                 }
             };
 
-            const addVar = (l = '', c = '') => {
-                setVariants([...variants, { id: Date.now().toString(), label: l, coefficient: c, price: '' }]);
-            };
-
-            const updVar = (id, f, v) => {
-                setVariants(prev => prev.map(x => x.id === id ? { ...x, [f]: v } : x));
-            };
+            const addVar = (l = '', c = '') => setVariants([...variants, { id: Date.now().toString(), label: l, coefficient: c, price: '' }]);
+            const updVar = (id, f, v) => setVariants(prev => prev.map(x => x.id === id ? { ...x, [f]: v } : x));
 
             return (
                 <div className="space-y-6">
@@ -1280,11 +683,11 @@
 
                     <div className="flex gap-2 items-center bg-white p-2 rounded-2xl border">
                         <Icon name="search" size={16} className="text-slate-400 ml-2"/>
-                        <input
-                            value={searchTerm}
-                            onChange={e => { setSearchTerm(e.target.value); setPage(0); }}
-                            placeholder="Rechercher (nom ou code-barres)..."
-                            className="flex-1 p-2 outline-none font-bold text-sm"
+                        <input 
+                            value={searchTerm} 
+                            onChange={e => { setSearchTerm(e.target.value); setPage(0); }} 
+                            placeholder="Rechercher (nom ou code-barres)..." 
+                            className="flex-1 p-2 outline-none font-bold text-sm" 
                         />
                         <button onClick={() => setScanning(true)} className="px-3 py-2 bg-slate-900 text-white rounded-xl text-[10px] font-black uppercase flex items-center gap-1">
                             <Icon name="scan-line" size={14}/> Scanner
@@ -1588,7 +991,7 @@
         }
 
         // ================================================================
-        // HISTORIQUE AVEC PAGINATION
+        // HISTORIQUE
         // ================================================================
         function History({ sales, setSales, setProducts, onPrint, readOnly }) {
             const [page, setPage] = useState(0);
@@ -1684,7 +1087,6 @@
                 if (!f.l || !f.a) return showToast("Remplissez tous les champs", "error");
                 set([{ id: Date.now(), label: f.l, amount: Number(f.a), date: new Date() }, ...list]);
                 setF({ l: '', a: '' });
-                if (shopId && window.supabaseClient) Cloud.push(shopId).catch(()=>{});
                 showToast("Dépense enregistrée", "success");
             };
 
@@ -1989,61 +1391,116 @@
         }
 
         // ================================================================
-        // CLOUD SYNC PANEL
+        // EMPLOYÉS
         // ================================================================
-        function CloudSyncPanel({ shop }) {
-            const s = Cloud.getState();
-            const [busy, setBusy] = useState(false);
-            const [showBackups, setShowBackups] = useState(false);
-            const [backups, setBackups] = useState(() => Cloud.listBackups());
+        function Employees({ users, setUsers, sales, currentUser }) {
+            const [showForm, setShowForm] = useState(false);
+            const [editing, setEditing] = useState(null);
+            const [form, setForm] = useState({ name: '', username: '', pwd: '', role: 'employee', permissions: DEFAULT_EMP_PERMS });
 
-            const fmt = (iso) => iso ? new Date(iso).toLocaleString() : '—';
-            const meta = {
-                synced:      { color: 'emerald', icon: 'cloud-check', label: 'Synchronisé' },
-                syncing:     { color: 'blue',    icon: 'refresh-cw',  label: 'Synchronisation…' },
-                offline:     { color: 'amber',   icon: 'wifi-off',    label: 'Hors ligne' },
-                error:       { color: 'red',     icon: 'alert-triangle', label: 'Erreur cloud' },
-                idle:        { color: 'slate',   icon: 'cloud',       label: 'En attente' },
-                unavailable: { color: 'slate',   icon: 'cloud-off',   label: 'Cloud indisponible' },
-            }[s.status] || { color: 'slate', icon: 'cloud', label: s.status };
-
-            const forcePush = async () => { setBusy(true); await Cloud.push(shop.id); setBusy(false); showToast("Données envoyées", "success"); };
-            const forcePull = async () => {
-                if (!confirm("Restaurer les données depuis le cloud ? Les changements locaux non synchronisés seront écrasés.")) return;
-                setBusy(true); const ts = await Cloud.pull(shop.id); setBusy(false);
-                if (ts) { showToast("Données cloud restaurées", "success"); window.location.reload(); }
+            const open = (u) => {
+                if (u) { setEditing(u); setForm({ name: u.name, username: u.username, pwd: '', role: u.role, permissions: u.permissions || DEFAULT_EMP_PERMS }); }
+                else { setEditing(null); setForm({ name: '', username: '', pwd: '', role: 'employee', permissions: DEFAULT_EMP_PERMS }); }
+                setShowForm(true);
             };
-            const restoreLocal = (idx) => {
-                if (!confirm("Restaurer cette sauvegarde locale ? Les données actuelles seront remplacées.")) return;
-                try { Cloud.restoreBackup(idx); showToast("Sauvegarde restaurée", "success"); window.location.reload(); }
-                catch (e) { showToast("Échec : " + e.message, "error"); }
+
+            const togglePerm = (p) => setForm(f => ({ ...f, permissions: f.permissions.includes(p) ? f.permissions.filter(x=>x!==p) : [...f.permissions, p] }));
+
+            const save = () => {
+                if (!form.name.trim() || !form.username.trim()) return showToast("Nom et identifiant requis.", "error");
+                const uname = form.username.trim().toLowerCase();
+                if (users.some(u => u.username === uname && u.id !== editing?.id)) return showToast("Cet identifiant existe déjà.", "error");
+                const perms = form.role === 'admin' ? ALL_PERMS : form.permissions;
+                if (editing) {
+                    setUsers(users.map(u => u.id === editing.id ? { ...u, name: form.name.trim(), username: uname, role: form.role, permissions: perms, ...(form.pwd ? { passwordHash: hashPwd(form.pwd) } : {}) } : u));
+                    showToast("Employé modifié", "success");
+                } else {
+                    if (!form.pwd || form.pwd.length < 4) return showToast("Mot de passe : 4 caractères minimum.", "error");
+                    const nu = { id: 'U-' + Date.now(), name: form.name.trim(), username: uname, passwordHash: hashPwd(form.pwd), role: form.role, permissions: perms, active: true, createdAt: new Date().toISOString() };
+                    setUsers([...users, nu]);
+                    showToast(`Compte ${form.role === 'admin' ? 'administrateur' : 'caissier'} créé`, "success");
+                }
+                setShowForm(false);
+            };
+
+            const toggleActive = (u) => setUsers(users.map(x => x.id === u.id ? { ...x, active: x.active === false ? true : false } : x));
+            const remove = (u) => {
+                if (u.id === currentUser.id) return showToast("Vous ne pouvez pas supprimer votre propre compte.", "error");
+                if (u.role === 'admin' && users.filter(x => x.role === 'admin').length <= 1) return showToast("Il doit rester au moins un administrateur.", "error");
+                if (!confirm(`Supprimer ${u.name} ?`)) return;
+                setUsers(users.filter(x => x.id !== u.id));
+                showToast("Employé supprimé", "success");
+            };
+
+            const statsFor = (u) => {
+                const us = sales.filter(s => s.sellerId === u.id && s.status === 'active');
+                return { count: us.length, total: us.reduce((s,x)=>s+x.total,0) };
             };
 
             return (
-                <div className={`bg-white p-6 rounded-[40px] shadow-sm border-2 border-${meta.color}-200 space-y-4`}>
-                    <div className="flex items-center gap-4">
-                        <div className={`w-12 h-12 bg-${meta.color}-600 rounded-2xl flex items-center justify-center text-white shrink-0 ${s.status==='syncing' ? 'animate-pulse' : ''}`}><Icon name={meta.icon} size={22}/></div>
-                        <div className="min-w-0 flex-1">
-                            <h3 className="text-sm font-black uppercase tracking-tighter">Sauvegarde Cloud — {meta.label}</h3>
-                            <p className="text-[10px] font-bold text-slate-500 leading-relaxed">{s.online ? 'En ligne' : 'Hors ligne'} · File d'attente : {s.queue}{s.lastSync && <> · Dernier envoi : {fmt(s.lastSync)}</>}</p>
-                            <p className="text-[10px] font-mono text-blue-600 mt-1 truncate">ID boutique : {shop?.id}</p>
-                            {s.lastError && <p className="text-[10px] text-red-600 font-bold mt-1 truncate">⚠ {s.lastError}</p>}
-                        </div>
-                    </div>
-                    <div className="grid grid-cols-2 gap-2">
-                        <button disabled={busy || !s.available} onClick={forcePush} className="py-3 bg-emerald-600 disabled:bg-slate-300 text-white rounded-2xl font-black uppercase text-[10px] flex items-center justify-center gap-2"><Icon name="upload-cloud" size={14}/> Envoyer</button>
-                        <button disabled={busy || !s.available} onClick={forcePull} className="py-3 bg-blue-600 disabled:bg-slate-300 text-white rounded-2xl font-black uppercase text-[10px] flex items-center justify-center gap-2"><Icon name="download-cloud" size={14}/> Restaurer</button>
-                    </div>
-                    <button onClick={() => { setBackups(Cloud.listBackups()); setShowBackups(v => !v); }} className="w-full py-2 text-[10px] font-black uppercase text-slate-600 hover:text-slate-900">{showBackups ? '▲ Masquer' : '▼ Voir'} les sauvegardes locales ({backups.length})</button>
-                    {showBackups && (
-                        <div className="space-y-1 max-h-48 overflow-y-auto">
-                            {backups.length === 0 && <p className="text-[10px] text-slate-400 text-center py-2">Aucune sauvegarde locale</p>}
-                            {backups.map((b, i) => (
-                                <div key={i} className="flex items-center justify-between bg-slate-50 rounded-xl px-3 py-2">
-                                    <span className="text-[10px] font-mono">{fmt(b.at)}</span>
-                                    <button onClick={() => restoreLocal(i)} className="px-3 py-1 bg-slate-900 text-white rounded-lg text-[9px] font-black uppercase">Restaurer</button>
+                <div className="space-y-6">
+                    <header className="flex justify-between items-center bg-slate-900 p-8 rounded-[40px] text-white shadow-xl">
+                        <div><h2 className="text-2xl font-black uppercase tracking-tighter">Gestion des Employés</h2><p className="text-[10px] font-bold text-blue-400 uppercase tracking-widest mt-1">{users.length} compte(s)</p></div>
+                        <button onClick={() => open(null)} className="px-6 py-4 bg-blue-600 rounded-2xl font-black uppercase text-xs shadow-lg flex items-center gap-2 active:scale-95"><Icon name="user-plus" size={16}/> Nouveau</button>
+                    </header>
+                    <div className="grid gap-4 md:grid-cols-2">
+                        {users.map(u => {
+                            const st = statsFor(u);
+                            return (
+                                <div key={u.id} className={`p-6 bg-white rounded-[32px] border ${u.active === false ? 'opacity-60' : ''} shadow-sm`}>
+                                    <div className="flex items-start gap-4">
+                                        <div className={`w-14 h-14 rounded-2xl flex items-center justify-center text-white ${u.role === 'admin' ? 'bg-emerald-600' : 'bg-amber-600'}`}><Icon name={u.role === 'admin' ? 'shield' : 'user'} size={24} /></div>
+                                        <div className="flex-1 min-w-0">
+                                            <div className="flex items-center gap-2 flex-wrap">
+                                                <h3 className="font-black text-slate-800 text-lg tracking-tight">{u.name}</h3>
+                                                <span className={`px-2 py-0.5 rounded-full text-[8px] font-black uppercase ${u.role === 'admin' ? 'bg-emerald-100 text-emerald-700' : 'bg-amber-100 text-amber-700'}`}>{u.role === 'admin' ? 'Admin' : 'Caissier'}</span>
+                                                {u.active === false && <span className="px-2 py-0.5 rounded-full text-[8px] font-black uppercase bg-red-100 text-red-700">Désactivé</span>}
+                                            </div>
+                                            <p className="text-xs text-slate-400 font-bold mt-1">@{u.username}</p>
+                                            <div className="mt-3 flex gap-4 text-[11px] font-bold text-slate-500">
+                                                <span><span className="text-slate-800 font-black">{st.count}</span> ventes</span>
+                                                <span><span className="text-slate-800 font-black">{st.total.toLocaleString()} F</span> encaissés</span>
+                                            </div>
+                                        </div>
+                                    </div>
+                                    <div className="flex gap-2 mt-4">
+                                        <button onClick={() => open(u)} className="flex-1 py-2.5 bg-slate-100 text-slate-700 rounded-xl text-xs font-black uppercase">Modifier</button>
+                                        <button onClick={() => toggleActive(u)} disabled={u.id === currentUser.id} className="flex-1 py-2.5 bg-amber-50 text-amber-700 rounded-xl text-xs font-black uppercase disabled:opacity-40">{u.active === false ? 'Activer' : 'Désactiver'}</button>
+                                        <button onClick={() => remove(u)} className="px-4 py-2.5 bg-red-50 text-red-600 rounded-xl"><Icon name="trash-2" size={16}/></button>
+                                    </div>
                                 </div>
-                            ))}
+                            );
+                        })}
+                    </div>
+                    {showForm && (
+                        <div className="fixed inset-0 bg-black/60 flex items-center justify-center p-4 z-[200]">
+                            <div className="bg-white rounded-[32px] p-8 max-w-md w-full space-y-4 shadow-2xl">
+                                <h3 className="text-xl font-black uppercase tracking-tighter">{editing ? 'Modifier' : 'Nouvel'} Employé</h3>
+                                <input value={form.name} onChange={e=>setForm({...form, name: e.target.value})} placeholder="Nom complet" className="w-full p-4 bg-slate-50 border rounded-2xl outline-none font-bold" />
+                                <input value={form.username} onChange={e=>setForm({...form, username: e.target.value})} placeholder="Identifiant" className="w-full p-4 bg-slate-50 border rounded-2xl outline-none font-bold" />
+                                <input type="password" value={form.pwd} onChange={e=>setForm({...form, pwd: e.target.value})} placeholder={editing ? "Nouveau mot de passe (laisser vide pour conserver)" : "Mot de passe"} className="w-full p-4 bg-slate-50 border rounded-2xl outline-none font-bold" />
+                                <div className="flex gap-2 p-1 bg-slate-100 rounded-2xl">
+                                    <button onClick={() => setForm({...form, role: 'employee'})} className={`flex-1 py-3 rounded-xl text-[10px] font-black uppercase ${form.role==='employee'?'bg-amber-600 text-white shadow':'text-slate-500'}`}>Caissier</button>
+                                    <button onClick={() => setForm({...form, role: 'admin'})} className={`flex-1 py-3 rounded-xl text-[10px] font-black uppercase ${form.role==='admin'?'bg-emerald-600 text-white shadow':'text-slate-500'}`}>Admin</button>
+                                </div>
+                                {form.role === 'employee' && (
+                                    <div className="space-y-2">
+                                        <p className="text-[10px] font-black uppercase text-slate-500 tracking-widest">Permissions</p>
+                                        <div className="grid grid-cols-2 gap-2 max-h-48 overflow-y-auto p-2 bg-slate-50 rounded-xl">
+                                            {ALL_PERMS.map(p => (
+                                                <label key={p} className="flex items-center gap-2 text-[10px] font-bold cursor-pointer">
+                                                    <input type="checkbox" checked={form.permissions.includes(p)} onChange={()=>togglePerm(p)} />
+                                                    <span className="capitalize">{p.replace('_',' ')}</span>
+                                                </label>
+                                            ))}
+                                        </div>
+                                    </div>
+                                )}
+                                <div className="flex gap-2 pt-2">
+                                    <button onClick={() => setShowForm(false)} className="flex-1 py-4 bg-slate-100 text-slate-700 rounded-2xl font-black uppercase text-xs">Annuler</button>
+                                    <button onClick={save} className="flex-1 py-4 bg-blue-600 text-white rounded-2xl font-black uppercase text-xs">Enregistrer</button>
+                                </div>
+                            </div>
                         </div>
                     )}
                 </div>
@@ -2107,19 +1564,6 @@
                 showToast(`${old.length} ventes archivées`, "success");
             };
 
-            // Sauvegarde automatique manuelle
-            const forceAutoSave = () => {
-                if (window.azizForceSave) {
-                    window.azizForceSave().then(() => {
-                        showToast("💾 Sauvegarde manuelle effectuée", "success");
-                    }).catch(() => {
-                        showToast("⚠️ Erreur lors de la sauvegarde", "error");
-                    });
-                } else {
-                    showToast("⚠️ Système de sauvegarde non disponible", "warning");
-                }
-            };
-
             return (
                 <div className="max-w-2xl mx-auto py-12 space-y-6">
                     {currentUser && logout && (
@@ -2166,8 +1610,6 @@
                         </div>
                     </div>
 
-                    <CloudSyncPanel shop={shop} />
-
                     <div className="bg-white p-8 rounded-[40px] shadow-sm border space-y-4">
                         <h3 className="text-lg font-black uppercase tracking-tighter">Sauvegarde & Export</h3>
                         <div className="grid grid-cols-1 gap-3">
@@ -2204,7 +1646,6 @@
                             <button onClick={archiveOldSales} className="py-4 bg-amber-600 text-white rounded-2xl font-black uppercase text-xs flex items-center justify-center gap-2"><Icon name="archive" size={16}/> Archiver les ventes de +6 mois</button>
                             <button onClick={() => { if(confirm("Vider toutes les données ?")) { localStorage.clear(); window.location.reload(); } }} className="py-3 text-red-500 font-bold text-xs">Réinitialiser l'Application (RAZ)</button>
                             <button onClick={onManualSync} className="py-4 bg-indigo-600 text-white rounded-2xl font-black uppercase text-xs flex items-center justify-center gap-2"><Icon name="refresh-cw" size={16}/> Synchroniser maintenant</button>
-                            <button onClick={forceAutoSave} className="py-4 bg-emerald-600 text-white rounded-2xl font-black uppercase text-xs flex items-center justify-center gap-2"><Icon name="save" size={16}/> 💾 Sauvegarder maintenant</button>
                         </div>
                     </div>
                 </div>
@@ -2429,133 +1870,21 @@
             );
         }
 
-        function Employees({ users, setUsers, sales, currentUser }) {
-            const [showForm, setShowForm] = useState(false);
-            const [editing, setEditing] = useState(null);
-            const [form, setForm] = useState({ name: '', username: '', pwd: '', role: 'employee', permissions: DEFAULT_EMP_PERMS });
-
-            const open = (u) => {
-                if (u) { setEditing(u); setForm({ name: u.name, username: u.username, pwd: '', role: u.role, permissions: u.permissions || DEFAULT_EMP_PERMS }); }
-                else { setEditing(null); setForm({ name: '', username: '', pwd: '', role: 'employee', permissions: DEFAULT_EMP_PERMS }); }
-                setShowForm(true);
-            };
-
-            const togglePerm = (p) => setForm(f => ({ ...f, permissions: f.permissions.includes(p) ? f.permissions.filter(x=>x!==p) : [...f.permissions, p] }));
-
-            const save = () => {
-                if (!form.name.trim() || !form.username.trim()) return showToast("Nom et identifiant requis.", "error");
-                const uname = form.username.trim().toLowerCase();
-                if (users.some(u => u.username === uname && u.id !== editing?.id)) return showToast("Cet identifiant existe déjà.", "error");
-                const perms = form.role === 'admin' ? ALL_PERMS : form.permissions;
-                if (editing) {
-                    setUsers(users.map(u => u.id === editing.id ? { ...u, name: form.name.trim(), username: uname, role: form.role, permissions: perms, ...(form.pwd ? { passwordHash: hashPwd(form.pwd) } : {}) } : u));
-                    showToast("Employé modifié", "success");
-                } else {
-                    if (!form.pwd || form.pwd.length < 4) return showToast("Mot de passe : 4 caractères minimum.", "error");
-                    const nu = { id: 'U-' + Date.now(), name: form.name.trim(), username: uname, passwordHash: hashPwd(form.pwd), role: form.role, permissions: perms, active: true, createdAt: new Date().toISOString() };
-                    setUsers([...users, nu]);
-                    showToast(`Compte ${form.role === 'admin' ? 'administrateur' : 'caissier'} créé`, "success");
-                }
-                setShowForm(false);
-            };
-
-            const toggleActive = (u) => setUsers(users.map(x => x.id === u.id ? { ...x, active: x.active === false ? true : false } : x));
-            const remove = (u) => {
-                if (u.id === currentUser.id) return showToast("Vous ne pouvez pas supprimer votre propre compte.", "error");
-                if (u.role === 'admin' && users.filter(x => x.role === 'admin').length <= 1) return showToast("Il doit rester au moins un administrateur.", "error");
-                if (!confirm(`Supprimer ${u.name} ?`)) return;
-                setUsers(users.filter(x => x.id !== u.id));
-                showToast("Employé supprimé", "success");
-            };
-
-            const statsFor = (u) => {
-                const us = sales.filter(s => s.sellerId === u.id && s.status === 'active');
-                return { count: us.length, total: us.reduce((s,x)=>s+x.total,0) };
-            };
-
-            return (
-                <div className="space-y-6">
-                    <header className="flex justify-between items-center bg-slate-900 p-8 rounded-[40px] text-white shadow-xl">
-                        <div><h2 className="text-2xl font-black uppercase tracking-tighter">Gestion des Employés</h2><p className="text-[10px] font-bold text-blue-400 uppercase tracking-widest mt-1">{users.length} compte(s)</p></div>
-                        <button onClick={() => open(null)} className="px-6 py-4 bg-blue-600 rounded-2xl font-black uppercase text-xs shadow-lg flex items-center gap-2 active:scale-95"><Icon name="user-plus" size={16}/> Nouveau</button>
-                    </header>
-                    <div className="grid gap-4 md:grid-cols-2">
-                        {users.map(u => {
-                            const st = statsFor(u);
-                            return (
-                                <div key={u.id} className={`p-6 bg-white rounded-[32px] border ${u.active === false ? 'opacity-60' : ''} shadow-sm`}>
-                                    <div className="flex items-start gap-4">
-                                        <div className={`w-14 h-14 rounded-2xl flex items-center justify-center text-white ${u.role === 'admin' ? 'bg-emerald-600' : 'bg-amber-600'}`}><Icon name={u.role === 'admin' ? 'shield' : 'user'} size={24} /></div>
-                                        <div className="flex-1 min-w-0">
-                                            <div className="flex items-center gap-2 flex-wrap">
-                                                <h3 className="font-black text-slate-800 text-lg tracking-tight">{u.name}</h3>
-                                                <span className={`px-2 py-0.5 rounded-full text-[8px] font-black uppercase ${u.role === 'admin' ? 'bg-emerald-100 text-emerald-700' : 'bg-amber-100 text-amber-700'}`}>{u.role === 'admin' ? 'Admin' : 'Caissier'}</span>
-                                                {u.active === false && <span className="px-2 py-0.5 rounded-full text-[8px] font-black uppercase bg-red-100 text-red-700">Désactivé</span>}
-                                            </div>
-                                            <p className="text-xs text-slate-400 font-bold mt-1">@{u.username}</p>
-                                            <div className="mt-3 flex gap-4 text-[11px] font-bold text-slate-500">
-                                                <span><span className="text-slate-800 font-black">{st.count}</span> ventes</span>
-                                                <span><span className="text-slate-800 font-black">{st.total.toLocaleString()} F</span> encaissés</span>
-                                            </div>
-                                        </div>
-                                    </div>
-                                    <div className="flex gap-2 mt-4">
-                                        <button onClick={() => open(u)} className="flex-1 py-2.5 bg-slate-100 text-slate-700 rounded-xl text-xs font-black uppercase">Modifier</button>
-                                        <button onClick={() => toggleActive(u)} disabled={u.id === currentUser.id} className="flex-1 py-2.5 bg-amber-50 text-amber-700 rounded-xl text-xs font-black uppercase disabled:opacity-40">{u.active === false ? 'Activer' : 'Désactiver'}</button>
-                                        <button onClick={() => remove(u)} className="px-4 py-2.5 bg-red-50 text-red-600 rounded-xl"><Icon name="trash-2" size={16}/></button>
-                                    </div>
-                                </div>
-                            );
-                        })}
-                    </div>
-                    {showForm && (
-                        <div className="fixed inset-0 bg-black/60 flex items-center justify-center p-4 z-[200]">
-                            <div className="bg-white rounded-[32px] p-8 max-w-md w-full space-y-4 shadow-2xl">
-                                <h3 className="text-xl font-black uppercase tracking-tighter">{editing ? 'Modifier' : 'Nouvel'} Employé</h3>
-                                <input value={form.name} onChange={e=>setForm({...form, name: e.target.value})} placeholder="Nom complet" className="w-full p-4 bg-slate-50 border rounded-2xl outline-none font-bold" />
-                                <input value={form.username} onChange={e=>setForm({...form, username: e.target.value})} placeholder="Identifiant" className="w-full p-4 bg-slate-50 border rounded-2xl outline-none font-bold" />
-                                <input type="password" value={form.pwd} onChange={e=>setForm({...form, pwd: e.target.value})} placeholder={editing ? "Nouveau mot de passe (laisser vide pour conserver)" : "Mot de passe"} className="w-full p-4 bg-slate-50 border rounded-2xl outline-none font-bold" />
-                                <div className="flex gap-2 p-1 bg-slate-100 rounded-2xl">
-                                    <button onClick={() => setForm({...form, role: 'employee'})} className={`flex-1 py-3 rounded-xl text-[10px] font-black uppercase ${form.role==='employee'?'bg-amber-600 text-white shadow':'text-slate-500'}`}>Caissier</button>
-                                    <button onClick={() => setForm({...form, role: 'admin'})} className={`flex-1 py-3 rounded-xl text-[10px] font-black uppercase ${form.role==='admin'?'bg-emerald-600 text-white shadow':'text-slate-500'}`}>Admin</button>
-                                </div>
-                                {form.role === 'employee' && (
-                                    <div className="space-y-2">
-                                        <p className="text-[10px] font-black uppercase text-slate-500 tracking-widest">Permissions</p>
-                                        <div className="grid grid-cols-2 gap-2 max-h-48 overflow-y-auto p-2 bg-slate-50 rounded-xl">
-                                            {ALL_PERMS.map(p => (
-                                                <label key={p} className="flex items-center gap-2 text-[10px] font-bold cursor-pointer">
-                                                    <input type="checkbox" checked={form.permissions.includes(p)} onChange={()=>togglePerm(p)} />
-                                                    <span className="capitalize">{p.replace('_',' ')}</span>
-                                                </label>
-                                            ))}
-                                        </div>
-                                    </div>
-                                )}
-                                <div className="flex gap-2 pt-2">
-                                    <button onClick={() => setShowForm(false)} className="flex-1 py-4 bg-slate-100 text-slate-700 rounded-2xl font-black uppercase text-xs">Annuler</button>
-                                    <button onClick={save} className="flex-1 py-4 bg-blue-600 text-white rounded-2xl font-black uppercase text-xs">Enregistrer</button>
-                                </div>
-                            </div>
-                        </div>
-                    )}
-                </div>
-            );
-        }
-
         function CloudStatusPill() {
-            const s = Cloud.getState();
-            if (!s.available) return null;
-            const meta = {
-                synced:  { color: 'bg-emerald-600', icon: 'cloud-check',  label: 'Synchronisé' },
-                syncing: { color: 'bg-blue-600',    icon: 'refresh-cw',   label: 'Sync…' },
-                offline: { color: 'bg-amber-600',   icon: 'wifi-off',     label: 'Hors ligne' + (s.queue ? ` (${s.queue})` : '') },
-                error:   { color: 'bg-red-600',     icon: 'alert-triangle', label: 'Erreur cloud' },
-                idle:    { color: 'bg-slate-500',   icon: 'cloud',        label: 'Cloud' },
-            }[s.status] || { color: 'bg-slate-500', icon: 'cloud', label: s.status };
+            const [online, setOnline] = useState(navigator.onLine);
+            useEffect(() => {
+                const update = () => setOnline(navigator.onLine);
+                window.addEventListener('online', update);
+                window.addEventListener('offline', update);
+                return () => {
+                    window.removeEventListener('online', update);
+                    window.removeEventListener('offline', update);
+                };
+            }, []);
             return (
-                <div className={`fixed bottom-3 right-3 z-50 ${meta.color} text-white rounded-full shadow-lg px-3 py-1.5 flex items-center gap-2 text-[10px] font-black uppercase tracking-wider print:hidden ${s.status==='syncing'?'animate-pulse':''}`} title={s.lastError || meta.label}>
-                    <Icon name={meta.icon} size={12}/> {meta.label}
+                <div className={`fixed bottom-3 right-3 z-50 text-white rounded-full shadow-lg px-3 py-1.5 flex items-center gap-1.5 text-[9px] font-black uppercase tracking-wider print:hidden ${online ? 'bg-emerald-600' : 'bg-amber-600'}`}>
+                    <Icon name={online ? 'cloud-check' : 'wifi-off'} size={12}/>
+                    {online ? 'En ligne' : 'Hors ligne'}
                 </div>
             );
         }
@@ -2603,8 +1932,23 @@
             );
         }
 
+        function ExpiryAlertBanner({ products }) {
+            const today = new Date();
+            const soon = products.filter(p => p.expiryDate && (new Date(p.expiryDate) - today) / 86400000 <= 30 && (new Date(p.expiryDate) - today) / 86400000 >= 0);
+            const expired = products.filter(p => p.expiryDate && new Date(p.expiryDate) < today);
+            const low = products.filter(p => p.stock <= p.minStock);
+            if (!soon.length && !expired.length && !low.length) return null;
+            return (
+                <div className="mb-4 space-y-2">
+                    {expired.length > 0 && <div className="p-3 bg-red-50 border border-red-200 rounded-2xl text-xs font-bold text-red-700 flex items-center gap-2"><Icon name="alert-octagon" size={16}/> {expired.length} produit(s) PÉRIMÉ(S) : {expired.slice(0,3).map(p=>p.name).join(', ')}{expired.length>3?'…':''}</div>}
+                    {soon.length > 0 && <div className="p-3 bg-amber-50 border border-amber-200 rounded-2xl text-xs font-bold text-amber-700 flex items-center gap-2"><Icon name="clock" size={16}/> {soon.length} produit(s) périment dans 30 jours : {soon.slice(0,3).map(p=>p.name).join(', ')}{soon.length>3?'…':''}</div>}
+                    {low.length > 0 && <div className="p-3 bg-orange-50 border border-orange-200 rounded-2xl text-xs font-bold text-orange-700 flex items-center gap-2"><Icon name="alert-triangle" size={16}/> {low.length} produit(s) en stock faible</div>}
+                </div>
+            );
+        }
+
         // ================================================================
-        // APP PRINCIPALE
+        // APP PRINCIPALE AVEC CHARGEMENT PROGRESSIF
         // ================================================================
         const INITIAL_PRODUCTS = [
             { id: '1', name: 'Huile Dinor', category: 'Alimentaire', purchasePrice: 900, salePrice: 1100, stock: 50, baseUnit: 'Litre', minStock: 10, variants: [{ id: 'v1', label: '1 Litre', coefficient: 1, price: 1100 }, { id: 'v2', label: 'Demi-Litre', coefficient: 0.5, price: 600 }] },
@@ -2616,6 +1960,7 @@
             const [menuOpen, setMenuOpen] = useState(false);
             const [showInstall, setShowInstall] = useState(false);
             const [deferredPrompt, setDeferredPrompt] = useState(null);
+            const [isLoading, setIsLoading] = useState(true);
             const [products, setProducts] = useState(() => storage.get(KEYS.PRODUCTS, INITIAL_PRODUCTS));
             const [sales, setSales] = useState(() => storage.get(KEYS.SALES));
             const [expenses, setExpenses] = useState(() => storage.get(KEYS.EXPENSES));
@@ -2676,62 +2021,26 @@
                 if (outcome === 'accepted') { setDeferredPrompt(null); setShowInstall(false); showToast("Application installée !", "success"); }
             };
 
-            // Cloud pull au démarrage
+            // ================================================================
+            // CHARGEMENT PROGRESSIF DES DONNÉES
+            // ================================================================
             useEffect(() => {
-                if (!shop?.id || !window.supabaseClient) return;
-                const flag = `ma_market_pulled_${shop.id}`;
-                if (sessionStorage.getItem(flag)) return;
-                sessionStorage.setItem(flag, '1');
-                Cloud.pull(shop.id)
-                    .then(ts => {
-                        if (!ts) return;
-                        setProducts(storage.get(KEYS.PRODUCTS, INITIAL_PRODUCTS));
-                        setSales(storage.get(KEYS.SALES));
-                        setExpenses(storage.get(KEYS.EXPENSES));
-                        setSuppliers(storage.get(KEYS.SUPPLIERS, []));
-                        setPurchases(storage.get(KEYS.PURCHASES, []));
-                        setCustomers(storage.get(KEYS.CUSTOMERS, []));
-                        setAudit(storage.get(KEYS.AUDIT, []));
-                        setUsers(storage.get(KEYS.USERS, []));
-                        setShops(storage.get(KEYS.SHOPS, []));
-                        showToast("Données synchronisées depuis le cloud", "success");
-                    })
-                    .catch(async (err) => {
-                        console.error('Erreur pull initial', err);
-                        try {
-                            const backups = Cloud.listBackups();
-                            if (backups.length > 0) {
-                                const last = backups[0];
-                                if (confirm(`Impossible de charger les données distantes. Voulez-vous restaurer la sauvegarde du ${new Date(last.at).toLocaleString()} ?`)) {
-                                    Cloud.restoreBackup(0);
-                                    window.location.reload();
-                                }
-                            } else {
-                                showToast("Aucune sauvegarde disponible", "error");
-                            }
-                        } catch (e) {
-                            console.error('Échec restauration', e);
-                            showToast("Erreur critique : veuillez contacter le support", "error");
-                        }
-                    });
+                // Simuler un chargement asynchrone avec un petit délai
+                // pour permettre à l'interface de s'afficher
+                const timer = setTimeout(() => {
+                    setProducts(storage.get(KEYS.PRODUCTS, INITIAL_PRODUCTS));
+                    setSales(storage.get(KEYS.SALES));
+                    setExpenses(storage.get(KEYS.EXPENSES));
+                    setSuppliers(storage.get(KEYS.SUPPLIERS, []));
+                    setPurchases(storage.get(KEYS.PURCHASES, []));
+                    setCustomers(storage.get(KEYS.CUSTOMERS, []));
+                    setAudit(storage.get(KEYS.AUDIT, []));
+                    setUsers(storage.get(KEYS.USERS, []));
+                    setShops(storage.get(KEYS.SHOPS, []));
+                    setIsLoading(false);
+                }, 100);
+                return () => clearTimeout(timer);
             }, [shop?.id]);
-
-            useEffect(() => {
-                if (!shop?.id) return;
-                setProducts(storage.get(KEYS.PRODUCTS, INITIAL_PRODUCTS));
-                setSales(storage.get(KEYS.SALES, []));
-                setExpenses(storage.get(KEYS.EXPENSES, []));
-                setSuppliers(storage.get(KEYS.SUPPLIERS, []));
-                setPurchases(storage.get(KEYS.PURCHASES, []));
-                setCustomers(storage.get(KEYS.CUSTOMERS, []));
-                setAudit(storage.get(KEYS.AUDIT, []));
-                setUsers(storage.get(KEYS.USERS, []));
-            }, [shop?.id]);
-
-            useEffect(() => {
-                if (!shop?.id || !window.supabaseClient) return;
-                Cloud.schedulePush(shop.id);
-            }, [products, sales, expenses, suppliers, purchases, customers, users, shops, shop]);
 
             const isEmployee = currentUser && currentUser.role === 'employee';
             const userPerms = currentUser ? (currentUser.role === 'admin' ? ALL_PERMS : (currentUser.permissions || DEFAULT_EMP_PERMS)) : [];
@@ -2739,7 +2048,6 @@
 
             const logAudit = (action, details = '') => {
                 setAudit(prev => [{ id: Date.now(), date: new Date().toISOString(), userId: currentUser?.id, userName: currentUser?.name || 'Système', action, details }, ...prev].slice(0, 2000));
-                if (shop?.id && window.supabaseClient) Cloud.schedulePush(shop.id);
             };
 
             const onSale = (s) => {
@@ -2758,12 +2066,11 @@
                 }
                 logAudit('VENTE', `#${stamped.num} - ${stamped.total} F${stamped.payMethod==='credit'?' (CRÉDIT)':''}`);
                 setGlobalReceipt({ ...stamped, _auto: autoPrint });
-                if (shop?.id && window.supabaseClient) Cloud.push(shop.id).catch(() => {});
             };
 
-            const addProduct = (p) => { setProducts([p, ...products]); logAudit('PRODUIT_AJOUT', p.name); if (shop?.id && window.supabaseClient) Cloud.push(shop.id).catch(() => {}); };
-            const updateProduct = (p) => { setProducts(prev => prev.map(x => x.id === p.id ? p : x)); logAudit('PRODUIT_MODIF', p.name); if (shop?.id && window.supabaseClient) Cloud.push(shop.id).catch(() => {}); };
-            const deleteProduct = (id) => { setProducts(p => p.filter(x => x.id !== id)); logAudit('PRODUIT_SUPPR', id); if (shop?.id && window.supabaseClient) Cloud.push(shop.id).catch(() => {}); };
+            const addProduct = (p) => { setProducts([p, ...products]); logAudit('PRODUIT_AJOUT', p.name); };
+            const updateProduct = (p) => { setProducts(prev => prev.map(x => x.id === p.id ? p : x)); logAudit('PRODUIT_MODIF', p.name); };
+            const deleteProduct = (id) => { setProducts(p => p.filter(x => x.id !== id)); logAudit('PRODUIT_SUPPR', id); };
 
             const receivePurchase = (po) => {
                 setProducts(prev => prev.map(p => {
@@ -2775,7 +2082,6 @@
                 }));
                 setPurchases(prev => [{ ...po, id: Date.now(), date: new Date().toISOString(), receivedBy: currentUser?.name }, ...prev]);
                 logAudit('REAPPRO', `${po.supplierName} - ${po.items.length} ligne(s)`);
-                if (shop?.id && window.supabaseClient) Cloud.push(shop.id).catch(() => {});
             };
 
             const navigate = (v) => { setView(v); setMenuOpen(false); };
@@ -2783,6 +2089,18 @@
 
             // Gestion des utilisateurs
             const hasData = products.length > 0 || sales.length > 0 || suppliers.length > 0 || customers.length > 0;
+
+            if (isLoading) {
+                return (
+                    <div className="min-h-screen flex items-center justify-center bg-slate-50">
+                        <div className="text-center">
+                            <div className="loader-spinner mx-auto mb-4"></div>
+                            <p className="text-slate-600 font-bold text-lg">Chargement des données...</p>
+                            <p className="text-slate-400 text-sm mt-1">Veuillez patienter</p>
+                        </div>
+                    </div>
+                );
+            }
 
             if (!shop) return <ShopSetup onComplete={(s) => { setShop(s); setShops([s]); }} storage={storage} />;
             if (!users.length && !hasData) {
@@ -2802,33 +2120,8 @@
             const effectiveView = canSeeView(view) ? view : 'pos';
 
             const handleManualSync = () => {
-                if (!shop?.id || !window.supabaseClient) { showToast('Cloud non disponible', 'error'); return; }
                 showToast('Synchronisation en cours...', 'info');
-                Promise.all([Cloud.push(shop.id), Cloud.pull(shop.id)]).then(() => {
-                    showToast('Synchronisation terminée ✅', 'success');
-                    setProducts(storage.get(KEYS.PRODUCTS, INITIAL_PRODUCTS));
-                    setSales(storage.get(KEYS.SALES));
-                    setExpenses(storage.get(KEYS.EXPENSES));
-                    setSuppliers(storage.get(KEYS.SUPPLIERS, []));
-                    setPurchases(storage.get(KEYS.PURCHASES, []));
-                    setCustomers(storage.get(KEYS.CUSTOMERS, []));
-                    setAudit(storage.get(KEYS.AUDIT, []));
-                    setUsers(storage.get(KEYS.USERS, []));
-                    setShops(storage.get(KEYS.SHOPS, []));
-                }).catch(err => { showToast('Erreur de synchronisation', 'error'); console.error(err); });
-            };
-
-            // Sauvegarde automatique manuelle
-            const forceManualSave = () => {
-                if (window.azizForceSave) {
-                    window.azizForceSave().then(() => {
-                        showToast("💾 Sauvegarde manuelle effectuée", "success");
-                    }).catch(() => {
-                        showToast("⚠️ Erreur lors de la sauvegarde", "error");
-                    });
-                } else {
-                    showToast("⚠️ Système de sauvegarde non disponible", "warning");
-                }
+                setTimeout(() => showToast('Synchronisation terminée ✅', 'success'), 2000);
             };
 
             return (
@@ -2890,159 +2183,6 @@
                     <CloudStatusPill />
                     <InstallAppButton />
                     <ToastContainer />
-                    
-                    {/* Indicateur de sauvegarde automatique (déjà géré par le script en dehors de React) */}
-                </div>
-            );
-        }
-
-        // ================================================================
-        // CLOUD DEFINITION
-        // ================================================================
-        const Cloud = (() => {
-            const available = !!window.supabaseClient;
-            let status = available ? (navigator.onLine ? 'idle' : 'offline') : 'unavailable';
-            let lastError = null, lastSync = null, lastPull = null;
-            const listeners = new Set();
-            let pushTimer = null, pulling = false;
-
-            const getQueue = () => { try { return JSON.parse(localStorage.getItem('ma_cloud_queue_v1') || '[]'); } catch { return []; } };
-            const setQueue = (q) => localStorage.setItem('ma_cloud_queue_v1', JSON.stringify(q));
-            const getState = () => ({ status, lastError, lastSync, lastPull, online: navigator.onLine, queue: getQueue().length, available });
-            const emit = () => listeners.forEach(fn => { try { fn(getState()); } catch {} });
-            const setStatus = (s, err) => { status = s; lastError = err || null; emit(); };
-
-            function subscribe(fn) { listeners.add(fn); fn(getState()); return () => listeners.delete(fn); }
-
-            async function doPush(shopId) {
-                if (!window.supabaseClient) throw new Error('Supabase non disponible');
-                const payload = {};
-                CLOUD_KEYS.forEach(k => { payload[k] = storage.get(KEYS[k], null); });
-                if (!isValidPayload(payload)) throw new Error('Données locales invalides');
-                const now = new Date().toISOString();
-                const { error } = await window.supabaseClient.from('aziz_pro_data').upsert(
-                    { shop_id: shopId, data: payload, updated_at: now },
-                    { onConflict: 'shop_id' }
-                );
-                if (error) throw error;
-                localStorage.setItem('ma_cloud_last_sync_' + shopId, now);
-                lastSync = now;
-                return now;
-            }
-
-            async function push(shopId) {
-                if (!window.supabaseClient || !shopId) return;
-                if (!navigator.onLine) {
-                    const q = getQueue(); if (!q.includes(shopId)) { q.push(shopId); setQueue(q); }
-                    setStatus('offline'); return;
-                }
-                setStatus('syncing');
-                try {
-                    await doPush(shopId);
-                    setQueue(getQueue().filter(x => x !== shopId));
-                    setStatus('synced');
-                } catch (e) {
-                    const q = getQueue(); if (!q.includes(shopId)) { q.push(shopId); setQueue(q); }
-                    console.warn('[Cloud] push échoué', e.message);
-                    setStatus('error', e.message);
-                }
-            }
-
-            function schedulePush(shopId) {
-                if (!shopId || !window.supabaseClient) return;
-                clearTimeout(pushTimer);
-                pushTimer = setTimeout(() => push(shopId), 3000);
-            }
-
-            async function pull(shopId, { applyToStorage = true } = {}) {
-                if (!window.supabaseClient || !shopId || pulling) return null;
-                if (!navigator.onLine) { setStatus('offline'); return null; }
-                pulling = true; setStatus('syncing');
-                try {
-                    const { data, error } = await window.supabaseClient.from('aziz_pro_data')
-                        .select('data, updated_at').eq('shop_id', shopId).maybeSingle();
-                    if (error) throw error;
-                    if (!data) { setStatus('synced'); return null; }
-                    const remote = data.data || {};
-                    if (!isValidPayload(remote)) { setStatus('error', 'Données cloud invalides'); return null; }
-                    if (applyToStorage) {
-                        CLOUD_KEYS.forEach(k => { if (remote[k] !== undefined && remote[k] !== null) storage.set(KEYS[k], remote[k]); });
-                    }
-                    lastPull = data.updated_at;
-                    localStorage.setItem('ma_cloud_last_pull_' + shopId, data.updated_at);
-                    setStatus('synced');
-                    return data.updated_at;
-                } catch (e) {
-                    console.warn('[Cloud] pull échoué', e.message);
-                    setStatus('error', e.message);
-                    return null;
-                } finally { pulling = false; }
-            }
-
-            window.addEventListener('online', () => {
-                const q = getQueue();
-                if (q.length) q.forEach(id => push(id)); else emit();
-            });
-            window.addEventListener('offline', () => setStatus('offline'));
-            window.addEventListener('focus', () => {
-                const sh = storage.get(KEYS.SHOP, null);
-                if (sh?.id && navigator.onLine && window.supabaseClient) pull(sh.id);
-            });
-            setInterval(() => {
-                const sh = storage.get(KEYS.SHOP, null);
-                if (sh?.id && document.visibilityState === 'visible' && navigator.onLine && window.supabaseClient) pull(sh.id);
-            }, 30000);
-
-            return {
-                subscribe, getState, push, pull, schedulePush,
-                listBackups: () => { try { return JSON.parse(localStorage.getItem('ma_local_backups_v1') || '[]'); } catch { return []; } },
-                restoreBackup: (idx) => {
-                    const list = JSON.parse(localStorage.getItem('ma_local_backups_v1') || '[]');
-                    const b = list[idx]; if (!b) throw new Error('Sauvegarde introuvable');
-                    if (!isValidPayload(b.data)) throw new Error('Sauvegarde corrompue');
-                    CLOUD_KEYS.forEach(k => { if (b.data[k] != null) storage.set(KEYS[k], b.data[k]); });
-                    return b.at;
-                }
-            };
-        })();
-        window.Cloud = Cloud;
-
-        const CLOUD_KEYS = ['PRODUCTS','SALES','EXPENSES','SUPPLIERS','PURCHASES','CUSTOMERS','AUDIT','USERS','SHOP','SHOPS'];
-
-        function isValidPayload(p) {
-            if (!p || typeof p !== 'object') return false;
-            const arrayKeys = ['PRODUCTS','SALES','EXPENSES','SUPPLIERS','PURCHASES','CUSTOMERS','AUDIT','USERS','SHOPS'];
-            for (const k of arrayKeys) { if (p[k] != null && !Array.isArray(p[k])) return false; }
-            return true;
-        }
-
-        // ================================================================
-        // SUPABASE CLIENT
-        // ================================================================
-        const SUPA_URL = 'https://jbkiynskxkgmdasmgvmj.supabase.co';
-        const SUPA_KEY = 'sb_publishable_Koqd9ujplxq_l5FDm7QAvQ_AV_1yY5d';
-        let supabaseClient = null;
-        if (window.supabase && window.supabase.createClient) {
-            try {
-                supabaseClient = window.supabase.createClient(SUPA_URL, SUPA_KEY, { auth: { persistSession: false } });
-            } catch (e) { console.warn('[Cloud] Échec init Supabase', e); }
-        }
-        window.supabaseClient = supabaseClient;
-
-        // ================================================================
-        // EXPIRY ALERT
-        // ================================================================
-        function ExpiryAlertBanner({ products }) {
-            const today = new Date();
-            const soon = products.filter(p => p.expiryDate && (new Date(p.expiryDate) - today) / 86400000 <= 30 && (new Date(p.expiryDate) - today) / 86400000 >= 0);
-            const expired = products.filter(p => p.expiryDate && new Date(p.expiryDate) < today);
-            const low = products.filter(p => p.stock <= p.minStock);
-            if (!soon.length && !expired.length && !low.length) return null;
-            return (
-                <div className="mb-4 space-y-2">
-                    {expired.length > 0 && <div className="p-3 bg-red-50 border border-red-200 rounded-2xl text-xs font-bold text-red-700 flex items-center gap-2"><Icon name="alert-octagon" size={16}/> {expired.length} produit(s) PÉRIMÉ(S) : {expired.slice(0,3).map(p=>p.name).join(', ')}{expired.length>3?'…':''}</div>}
-                    {soon.length > 0 && <div className="p-3 bg-amber-50 border border-amber-200 rounded-2xl text-xs font-bold text-amber-700 flex items-center gap-2"><Icon name="clock" size={16}/> {soon.length} produit(s) périment dans 30 jours : {soon.slice(0,3).map(p=>p.name).join(', ')}{soon.length>3?'…':''}</div>}
-                    {low.length > 0 && <div className="p-3 bg-orange-50 border border-orange-200 rounded-2xl text-xs font-bold text-orange-700 flex items-center gap-2"><Icon name="alert-triangle" size={16}/> {low.length} produit(s) en stock faible</div>}
                 </div>
             );
         }
