@@ -4,7 +4,6 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
     <title>Aziz-Pro</title>
-    <!-- CDN avec fallbacks -->
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://unpkg.com/lucide@latest"></script>
@@ -84,9 +83,6 @@
         window.addEventListener('beforeinstallprompt', function(e) { e.preventDefault(); window.__deferredInstall = e; window.dispatchEvent(new CustomEvent('aziz-install-available')); });
         window.addEventListener('appinstalled', function() { window.__deferredInstall = null; });
         
-        // ================================================================
-        // CORRECTION: IMPRESSION FORCÉE AVEC 5 MÉTHODES DE SECOURS
-        // ================================================================
         window.forcePrint = function() {
             try { window.print(); } catch(e) {}
             try {
@@ -106,9 +102,6 @@
             try { var btn = document.createElement('button'); btn.style.display = 'none'; btn.onclick = function() { window.print(); }; document.body.appendChild(btn); btn.click(); setTimeout(function() { document.body.removeChild(btn); }, 1000); } catch(e) {}
         };
         
-        // ================================================================
-        // CORRECTION: FALLBACK SI CDN TOMBE
-        // ================================================================
         if (typeof React === 'undefined') {
             var fallback = document.getElementById('fallback-error');
             if (fallback) fallback.style.display = 'block';
@@ -124,9 +117,6 @@
         var useMemo = React.useMemo;
         var useCallback = React.useCallback;
 
-        // ================================================================
-        // CONSTANTES
-        // ================================================================
         var KEYS = {
             PRODUCTS: 'ma_market_p_v3',
             SALES: 'ma_market_s_v3',
@@ -140,8 +130,7 @@
             AUDIT: 'ma_market_audit_v3',
             SHOPS: 'ma_market_shops_v3',
             ARCHIVED_SALES: 'ma_market_archived_sales_v3',
-            ARCHIVED_BENEFITS: 'ma_market_archived_benefits_v3',
-            BACKUP: 'ma_market_backup_v1'
+            ARCHIVED_BENEFITS: 'ma_market_archived_benefits_v3'
         };
 
         var ALL_PERMS = ['pos','stock_view','stock_edit','history_all','expenses','debt','reports','suppliers','customers','employees','settings','audit'];
@@ -152,7 +141,7 @@
         var OWNER_CODE = '53228052';
 
         // ================================================================
-        // UTILITAIRES
+        // HASH PASSWORD
         // ================================================================
         function hashPwd(str) {
             if (!str) return '0';
@@ -527,7 +516,7 @@
         }
 
         // ================================================================
-        // POS (CAISSE) - COMPLET
+        // POS
         // ================================================================
         function POS(_a) {
             var products = _a.products, onSale = _a.onSale, autoPrint = _a.autoPrint, setAutoPrint = _a.setAutoPrint, customers = _a.customers, setCustomers = _a.setCustomers;
@@ -754,7 +743,7 @@
         }
 
         // ================================================================
-        // STOCK - COMPLET
+        // STOCK
         // ================================================================
         function Stock(_a) {
             var items = _a.items, onAdd = _a.onAdd, onEdit = _a.onEdit, onDelete = _a.onDelete, onGoToSale = _a.onGoToSale, readOnly = _a.readOnly;
@@ -1166,7 +1155,7 @@
         }
 
         // ================================================================
-        // HISTORY - AVEC PAGINATION
+        // HISTORY
         // ================================================================
         function History(_a) {
             var sales = _a.sales, setSales = _a.setSales, setProducts = _a.setProducts, onPrint = _a.onPrint, readOnly = _a.readOnly;
@@ -1194,7 +1183,6 @@
                 showToast("Vente annulée", "warning");
             };
 
-            // CORRECTION: Supprimer une vente avec conservation du bénéfice
             var deleteSale = function(sale) {
                 if (!confirm("Supprimer cette vente ? Le bénéfice sera conservé.")) return;
                 var archiveKey = KEYS.ARCHIVED_BENEFITS;
@@ -1611,7 +1599,7 @@
         }
 
         // ================================================================
-        // SETTINGS - COMPLET AVEC LOGO ET TOUTES CORRECTIONS
+        // SETTINGS
         // ================================================================
         function Settings(_a) {
             var storage = _a.storage, products = _a.products, sales = _a.sales, expenses = _a.expenses, shop = _a.shop, setShop = _a.setShop, shops = _a.shops, setShops = _a.setShops, logs = _a.logs, activities = _a.activities, suppliers = _a.suppliers, purchases = _a.purchases, customers = _a.customers, audit = _a.audit, logout = _a.logout, currentUser = _a.currentUser, onManualSync = _a.onManualSync;
@@ -1689,7 +1677,6 @@
                 showToast(old.length + ' ventes archivées', "success");
             };
 
-            // CORRECTION: Nettoyage automatique des données
             var cleanStorage = function() {
                 if (!confirm("Nettoyer les anciennes données (ventes de plus de 2 ans) ?")) return;
                 var cutoff = new Date();
@@ -1833,7 +1820,7 @@
         }
 
         // ================================================================
-        // SHOP SETUP, FIRST ADMIN, AUTH SCREEN (inchangés mais présents)
+        // SHOP SETUP - CORRECTION: SYNCHRONISATION FORCÉE DES UTILISATEURS
         // ================================================================
         function ShopSetup(_a) {
             var onComplete = _a.onComplete;
@@ -1847,7 +1834,6 @@
             var _e = useState(function() { return localStorage.getItem('ma_owner_ok') === '1'; }), unlocked = _e[0], setUnlocked = _e[1];
             var _f = useState(''), code = _f[0], setCode = _f[1];
             var _g = useState(false), busy = _g[0], setBusy = _g[1];
-            var OWNER_CODE = '53228052';
 
             var tryUnlock = function() {
                 if (code.trim() === OWNER_CODE) {
@@ -1870,14 +1856,41 @@
                 var id = joinId.trim().toUpperCase();
                 if (!id.startsWith('SHOP-')) return showToast("Code boutique invalide. Format attendu : SHOP-XXXXXXX", "error");
                 setBusy(true);
+                showToast("Synchronisation en cours...", "info");
+                
                 try {
+                    // FORCER la synchronisation complète depuis le cloud
+                    if (window.Cloud) {
+                        try { 
+                            window.Cloud.pull(id, { applyToStorage: true });
+                        } catch (_) {}
+                    }
+                    
+                    // RECHARGER TOUTES les données depuis localStorage
+                    var users = JSON.parse(localStorage.getItem(KEYS.USERS) || '[]');
+                    var products = JSON.parse(localStorage.getItem(KEYS.PRODUCTS) || '[]');
+                    var sales = JSON.parse(localStorage.getItem(KEYS.SALES) || '[]');
+                    
+                    // Si aucun utilisateur, réessayer avec une pause
+                    if (users.length === 0) {
+                        setTimeout(function() {
+                            try {
+                                if (window.Cloud) {
+                                    window.Cloud.pull(id, { applyToStorage: true });
+                                }
+                                var usersRetry = JSON.parse(localStorage.getItem(KEYS.USERS) || '[]');
+                                if (usersRetry.length > 0) {
+                                    showToast(usersRetry.length + " utilisateur(s) synchronisé(s) ✅", "success");
+                                }
+                            } catch(e) {}
+                        }, 500);
+                    } else {
+                        showToast(users.length + " utilisateur(s) chargé(s) ✅", "success");
+                    }
+                    
                     var shops = JSON.parse(localStorage.getItem(KEYS.SHOPS) || '[]');
                     var sh = shops.find(function(s) { return s.id === id; });
-                    if (window.Cloud) {
-                        try { window.Cloud.pull(id, { applyToStorage: true }); } catch (_) {}
-                    }
-                    shops = JSON.parse(localStorage.getItem(KEYS.SHOPS) || '[]');
-                    sh = shops.find(function(s) { return s.id === id; });
+                    
                     if (sh) {
                         localStorage.setItem(KEYS.SHOP, JSON.stringify(sh));
                     }
@@ -1885,9 +1898,16 @@
                         sh = { id: id, name: id.slice(-4), phone: '', address: '', createdAt: new Date().toISOString() };
                     }
                     localStorage.setItem('ma_last_shop_id', id);
+                    
+                    // Vérification finale
+                    var finalUsers = JSON.parse(localStorage.getItem(KEYS.USERS) || '[]');
+                    if (finalUsers.length === 0) {
+                        showToast("Aucun utilisateur trouvé. Créez un compte admin avec le code " + OWNER_CODE, "warning");
+                    }
+                    
                     onComplete(sh);
                 } catch (e) {
-                    showToast("Impossible d'ouvrir la boutique : " + e.message, "error");
+                    showToast("Erreur : " + e.message, "error");
                 } finally {
                     setBusy(false);
                 }
@@ -1934,14 +1954,17 @@
                             'div',
                             { className: 'space-y-6' },
                             React.createElement('div', { className: 'space-y-1' }, React.createElement('label', { className: 'text-[10px] font-black text-slate-500 uppercase tracking-widest px-2' }, 'Entrez votre Code Boutique (ID)'), React.createElement('input', { value: joinId, onChange: function(e) { return setJoinId(e.target.value.toUpperCase()); }, className: 'w-full p-5 bg-slate-900 border border-slate-700 rounded-2xl outline-none focus:border-blue-500 text-center text-xl font-black text-blue-400 tracking-widest', placeholder: 'SHOP-XXXXXX' })),
-                            React.createElement('p', { className: 'text-[10px] text-slate-500 italic text-center px-4 leading-relaxed' }, 'Saisissez votre code boutique pour retrouver instantanément vos articles et vos ventes.'),
-                            React.createElement('button', { onClick: handleJoin, disabled: busy, className: 'w-full py-5 bg-blue-600 disabled:opacity-60 rounded-3xl font-black uppercase text-xs shadow-xl active:scale-95 transition-transform' }, busy ? 'Ouverture...' : 'Ouvrir ma Boutique')
+                            React.createElement('p', { className: 'text-[10px] text-slate-500 italic text-center px-4 leading-relaxed' }, 'Saisissez votre code boutique pour retrouver instantanément vos articles, vos ventes et vos identifiants.'),
+                            React.createElement('button', { onClick: handleJoin, disabled: busy, className: 'w-full py-5 bg-blue-600 disabled:opacity-60 rounded-3xl font-black uppercase text-xs shadow-xl active:scale-95 transition-transform' }, busy ? 'Synchronisation...' : 'Ouvrir ma Boutique')
                         )
                     )
                 )
             );
         }
 
+        // ================================================================
+        // FIRST ADMIN SETUP
+        // ================================================================
         function FirstAdminSetup(_a) {
             var onComplete = _a.onComplete;
             var _b = useState(''), name = _b[0], setName = _b[1];
@@ -1990,6 +2013,9 @@
             );
         }
 
+        // ================================================================
+        // AUTH SCREEN - CORRECTION: VÉRIFICATION ROBUSTE DES IDENTIFIANTS
+        // ================================================================
         function AuthScreen(_a) {
             var users = _a.users, onLogin = _a.onLogin, shop = _a.shop;
             var _b = useState('login'), tab = _b[0], setTab = _b[1];
@@ -2004,9 +2030,42 @@
 
             var submit = function() {
                 setErr('');
-                var u = users.find(function(x) { return x.username === username.trim().toLowerCase() && x.active !== false; });
-                if (!u) return setErr("Identifiant introuvable ou compte désactivé.");
-                if (u.passwordHash !== hashPwd(pwd)) return setErr("Mot de passe incorrect.");
+                var usernameClean = username.trim().toLowerCase();
+                var u = users.find(function(x) { 
+                    return x.username === usernameClean && x.active !== false; 
+                });
+                
+                if (!u) {
+                    // Vérifier si les utilisateurs existent dans le localStorage mais pas dans le state
+                    var allUsers = JSON.parse(localStorage.getItem(KEYS.USERS) || '[]');
+                    if (allUsers.length > 0 && users.length === 0) {
+                        setErr("Rechargez la page ou synchronisez les données");
+                        return;
+                    }
+                    if (allUsers.length > 0) {
+                        // Recharger les utilisateurs depuis le localStorage
+                        var found = allUsers.find(function(x) { 
+                            return x.username === usernameClean && x.active !== false; 
+                        });
+                        if (found) {
+                            if (found.passwordHash === hashPwd(pwd)) {
+                                onLogin(found);
+                                return;
+                            }
+                            setErr("Mot de passe incorrect.");
+                            return;
+                        }
+                    }
+                    setErr("Identifiant introuvable ou compte désactivé.");
+                    return;
+                }
+                
+                var hashed = hashPwd(pwd);
+                if (u.passwordHash !== hashed) {
+                    setErr("Mot de passe incorrect.");
+                    return;
+                }
+                
                 onLogin(u);
             };
 
@@ -2015,7 +2074,7 @@
                 if (!cName.trim() || !cUser.trim() || !cPwd) return setErr("Remplissez tous les champs.");
                 if (cPwd !== cPwd2) return setErr("Les mots de passe ne correspondent pas.");
                 if (cPwd.length < 4) return setErr("Mot de passe : 4 caractères minimum.");
-                if (cCode.trim() !== '53228052') return setErr("Code d'activation incorrect.");
+                if (cCode.trim() !== OWNER_CODE) return setErr("Code d'activation incorrect.");
                 var uname = cUser.trim().toLowerCase();
                 var existing = JSON.parse(localStorage.getItem(KEYS.USERS) || '[]');
                 if (existing.some(function(u) { return u.username === uname; })) return setErr("Cet identifiant existe déjà.");
@@ -2035,7 +2094,8 @@
                         { className: 'text-center mb-6' },
                         React.createElement('div', { className: 'w-20 h-20 bg-blue-600 rounded-3xl flex items-center justify-center mx-auto mb-4 border-4 border-slate-700 shadow-xl' }, React.createElement(Icon, { name: tab==='login'?'lock':'user-plus', size: 36 })),
                         React.createElement('h2', { className: 'text-2xl font-black tracking-tighter uppercase' }, shop.name),
-                        React.createElement('p', { className: 'text-slate-400 text-xs font-bold uppercase tracking-widest mt-2' }, tab==='login'?'Connexion':'Nouveau compte')
+                        React.createElement('p', { className: 'text-slate-400 text-xs font-bold uppercase tracking-widest mt-2' }, tab==='login'?'Connexion':'Nouveau compte'),
+                        React.createElement('p', { className: 'text-[9px] text-slate-500 mt-1' }, '👤 Utilisateurs chargés: ', users.length)
                     ),
                     React.createElement(
                         'div',
@@ -2349,13 +2409,13 @@
                 if (outcome === 'accepted') { setDeferredPrompt(null); setShowInstall(false); showToast("Application installée !", "success"); }
             };
 
-            // CORRECTION: Chargement cloud en arrière-plan - NE BLOQUE JAMAIS
+            // Chargement cloud en arrière-plan
             useEffect(function() {
                 if (!shop || !shop.id || !window.supabaseClient) return;
                 var flag = 'ma_market_pulled_' + shop.id;
                 if (sessionStorage.getItem(flag)) return;
                 sessionStorage.setItem(flag, '1');
-                // Chargement en arrière-plan, ne bloque jamais l'UI
+                
                 setTimeout(function() {
                     Cloud.pull(shop.id)
                         .then(function(ts) {
